@@ -15,6 +15,7 @@ import thesesRouter from './routes/theses.js';
 import signalsRouter from './routes/signals.js';
 import marketRouter from './routes/market.js';
 import reviewsRouter from './routes/reviews.js';
+import botRouter from './routes/bot.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -48,6 +49,7 @@ app.use('/api/theses', thesesRouter);
 app.use('/api/signals', signalsRouter);
 app.use('/api/market', marketRouter);
 app.use('/api/reviews', reviewsRouter);
+app.use('/api/bot', botRouter);
 
 // Health endpoint
 app.get('/api/health', (req, res) => {

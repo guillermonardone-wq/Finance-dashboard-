@@ -9,6 +9,7 @@ import MarketData from './pages/MarketData';
 import Reviews from './pages/Reviews';
 import Quarantine from './pages/Quarantine';
 import ProviderHealth from './pages/ProviderHealth';
+import BotFeed from './pages/BotFeed';
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/bot" element={<BotFeed />} />
           <Route path="/signals" element={<SignalInbox />} />
           <Route path="/theses" element={<ThesisList />} />
           <Route path="/thesis/new" element={<ThesisBuilder />} />
