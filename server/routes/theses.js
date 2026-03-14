@@ -34,18 +34,23 @@ router.post('/', (req, res) => {
   const now = new Date().toISOString();
   const t = req.body;
 
-  // Validate mandatory disconfirmation fields
-  if (!t.disconfirming_evidence || !t.strongest_bear_case || !t.what_would_make_opposite_stronger) {
-    return res.status(400).json({
-      error: 'BEHAVIORAL GATE: You must provide disconfirming evidence, the strongest bear case, and what would make the opposite case stronger. No shortcuts.',
-    });
-  }
+  // Draft theses skip behavioral gates — rigor is enforced at classification upgrade
+  const isDraft = (t.status || 'draft') === 'draft';
 
-  // Validate probability range
-  if (t.probability_best <= 0 || t.probability_best >= 1) {
-    return res.status(400).json({
-      error: 'BEHAVIORAL GATE: Probability must be between 0 and 1 exclusive. Certainty language is not allowed.',
-    });
+  if (!isDraft) {
+    // Validate mandatory disconfirmation fields
+    if (!t.disconfirming_evidence || !t.strongest_bear_case || !t.what_would_make_opposite_stronger) {
+      return res.status(400).json({
+        error: 'BEHAVIORAL GATE: You must provide disconfirming evidence, the strongest bear case, and what would make the opposite case stronger. No shortcuts.',
+      });
+    }
+
+    // Validate probability range
+    if (t.probability_best <= 0 || t.probability_best >= 1) {
+      return res.status(400).json({
+        error: 'BEHAVIORAL GATE: Probability must be between 0 and 1 exclusive. Certainty language is not allowed.',
+      });
+    }
   }
 
   db.prepare(`

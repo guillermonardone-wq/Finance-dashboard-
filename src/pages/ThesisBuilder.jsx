@@ -29,6 +29,7 @@ export default function ThesisBuilder() {
   const [form, setForm] = useState({ ...EMPTY_THESIS });
   const [error, setError] = useState(null);
   const [step, setStep] = useState(0);
+  const [mode, setMode] = useState('quick'); // 'quick' or 'full'
   const navigate = useNavigate();
   const { createThesis } = useThesisStore();
 
@@ -52,6 +53,25 @@ export default function ThesisBuilder() {
     setForm(f => ({ ...f, [field]: [...(f[field] || []), template] }));
   };
 
+  const handleQuickCapture = async () => {
+    setError(null);
+    if (!form.title.trim() || !form.thesis_statement.trim()) {
+      setError('Title and thesis statement are required.');
+      return;
+    }
+    try {
+      const thesis = await createThesis({
+        title: form.title.trim(),
+        thesis_statement: form.thesis_statement.trim(),
+        status: 'draft',
+        classification: 'WATCH',
+      });
+      navigate(`/thesis/${thesis.id}`);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleSubmit = async () => {
     setError(null);
     try {
@@ -68,11 +88,88 @@ export default function ThesisBuilder() {
 
   const probSpread = form.probability_high - form.probability_low;
 
+  // === QUICK CAPTURE MODE ===
+  if (mode === 'quick') {
+    return (
+      <div className="p-6 max-w-3xl">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-slate-100">Quick Capture</h1>
+          <p className="text-sm text-slate-500 mt-1">Capture the idea now. Add structure later.</p>
+        </div>
+
+        {error && (
+          <div className="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded p-3 mb-4">{error}</div>
+        )}
+
+        <div className="bg-slate-900 rounded-lg border border-slate-800 p-6 space-y-4">
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">
+              Thesis Title <span className="text-red-400">*</span>
+            </label>
+            <input
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              className="input-field"
+              placeholder="e.g. Oil spike on Hormuz disruption"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">
+              What will happen and why? <span className="text-red-400">*</span>
+            </label>
+            <textarea
+              value={form.thesis_statement}
+              onChange={e => setForm(f => ({ ...f, thesis_statement: e.target.value }))}
+              className="input-field h-32"
+              placeholder="Describe the specific prediction and the reasoning behind it..."
+              onKeyDown={e => {
+                if (e.key === 'Enter' && e.metaKey) handleQuickCapture();
+              }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <button
+              onClick={() => setMode('full')}
+              className="text-xs text-slate-500 hover:text-slate-300"
+            >
+              Switch to full builder
+            </button>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-600">Cmd+Enter to save</span>
+              <button
+                onClick={handleQuickCapture}
+                className="px-6 py-2.5 bg-cyan-500 text-slate-950 font-bold rounded text-sm hover:bg-cyan-400"
+              >
+                Save Draft
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-600 mt-4">
+          Saved as draft. You can expand with causal chain, assets, probabilities, and disconfirmation from the thesis detail page.
+        </p>
+      </div>
+    );
+  }
+
+  // === FULL BUILDER MODE ===
   return (
     <div className="p-6 max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-100">New Thesis</h1>
-        <p className="text-sm text-slate-500 mt-1">Operationalize intuition. Force structure. No shortcuts.</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-100">New Thesis</h1>
+          <p className="text-sm text-slate-500 mt-1">Operationalize intuition. Force structure. No shortcuts.</p>
+        </div>
+        <button
+          onClick={() => setMode('quick')}
+          className="text-xs text-cyan-400 hover:text-cyan-300 border border-cyan-400/20 rounded px-3 py-1.5"
+        >
+          Quick Capture
+        </button>
       </div>
 
       {/* Challenge prompt */}
@@ -176,7 +273,7 @@ export default function ThesisBuilder() {
 
             <Field label="Probability Estimate" required hint={
               probSpread < 0.15
-                ? '⚠ Spread too narrow. Overconfidence detected. Widen your range.'
+                ? 'Spread too narrow. Overconfidence detected. Widen your range.'
                 : `Spread: ${(probSpread * 100).toFixed(0)}%`
             }>
               <div className="grid grid-cols-3 gap-4">

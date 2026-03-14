@@ -7,9 +7,10 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-import { initDb } from './db/connection.js';
+import { initDb, getDb } from './db/connection.js';
 import { registry } from './providers/registry.js';
 import { cache } from './services/cache.js';
+import { seed } from './seed-fn.js';
 
 import thesesRouter from './routes/theses.js';
 import signalsRouter from './routes/signals.js';
@@ -33,6 +34,18 @@ if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
 console.log('[Server] Initializing database...');
 initDb();
 console.log('[Server] Database ready.');
+
+// Auto-seed if database is empty (first run)
+{
+  const db = getDb();
+  const thesisCount = db.prepare('SELECT COUNT(*) as count FROM theses').get().count;
+  const signalCount = db.prepare('SELECT COUNT(*) as count FROM signals').get().count;
+  if (thesisCount === 0 && signalCount === 0) {
+    console.log('[Server] Empty database detected — running auto-seed...');
+    seed();
+    console.log('[Server] Auto-seed complete.');
+  }
+}
 
 // Initialize provider registry
 (async () => {
