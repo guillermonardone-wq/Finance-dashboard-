@@ -1,12 +1,11 @@
-// GET /api/cron – refresh market data, recalculate dislocation + cluster scores
-// In production you'd call the Polymarket API here.
-// For Phase 1/2 this simulates small price movements and recalculates everything.
+// GET /api/cron – refresh market data, recalculate all scores
+// Simulates price movements for Phase 1, then runs the full
+// Phase 2 + 3 pipeline on every cluster.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calculateDislocation } from "@/lib/dislocation";
-import { computeClusterAnalytics } from "@/lib/cluster-analytics";
-import { detectClusterSignals } from "@/lib/cluster-signals";
+import { computeCluster } from "@/lib/cluster-compute";
 
 export const dynamic = "force-dynamic";
 
@@ -76,7 +75,7 @@ export async function GET() {
     updated++;
   }
 
-  // ── Phase 2: recompute cluster analytics + signals ──
+  // ── Phase 2 + 3: recompute clusters ──
 
   const clusters = await prisma.cluster.findMany({
     include: { markets: { include: { market: true } } },
@@ -86,18 +85,25 @@ export async function GET() {
 
   for (const cluster of clusters) {
     const members = cluster.markets.map((cm) => cm.market);
+    const result = computeCluster(cluster.name, cluster.theme, members);
 
-    const analytics = computeClusterAnalytics(members);
     await prisma.cluster.update({
       where: { id: cluster.id },
-      data: analytics,
+      data: {
+        avgProbability: result.avgProbability,
+        probabilityDispersion: result.probabilityDispersion,
+        inconsistencyScore: result.inconsistencyScore,
+        divergenceScore: result.divergenceScore,
+        confidenceScore: result.confidenceScore,
+        rankingScore: result.rankingScore,
+        classification: result.classification,
+        explanation: result.explanation,
+        expressions: result.expressions,
+      },
     });
 
-    // Replace old signals with fresh ones
     await prisma.clusterSignal.deleteMany({ where: { clusterId: cluster.id } });
-
-    const signals = detectClusterSignals(members, analytics.avgProbability, analytics.probabilityDispersion);
-    for (const sig of signals) {
+    for (const sig of result.signals) {
       await prisma.clusterSignal.create({
         data: {
           clusterId: cluster.id,

@@ -47,9 +47,14 @@ export interface Cluster {
   inconsistencyScore: number;
   divergenceScore: number;
   confidenceScore: number;
+  // Phase 3
+  rankingScore: number;
+  classification: string;  // JSON string of ClassificationLabel[]
+  explanation: string;
+  expressions: string;     // JSON string of Expression[]
   createdAt: string;
   updatedAt: string;
-  _count?: { markets: number };
+  _count?: { markets: number; signals: number };
 }
 
 export interface ClusterSignal {
@@ -65,4 +70,14 @@ export interface ClusterSignal {
 export interface ClusterDetail extends Cluster {
   markets: { market: Market }[];
   signals: ClusterSignal[];
+}
+
+// ── Phase 3: Parsed types for UI ──
+
+export interface Expression {
+  type: "direct" | "conservative" | "convex" | "hedge";
+  title: string;
+  rationale: string;
+  mainRisk: string;
+  invalidation: string;
 }

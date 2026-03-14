@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     divergence: { divergenceScore: "desc" },
     inconsistency: { inconsistencyScore: "desc" },
     confidence: { confidenceScore: "desc" },
+    ranking: { rankingScore: "desc" },
   };
 
   const clusters = await prisma.cluster.findMany({

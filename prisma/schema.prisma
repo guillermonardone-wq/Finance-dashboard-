@@ -1,11 +1,5 @@
 // ──────────────────────────────────────────────
-// Event Edge – Prisma Schema (Phase 1 + Phase 2)
-// ──────────────────────────────────────────────
-// Market         → one prediction-market question
-// Snapshot       → a point-in-time price/volume capture
-// Cluster        → a thematic group of related markets
-// ClusterMarket  → join table linking markets to clusters
-// ClusterSignal  → a flagged signal on a cluster
+// Event Edge – Prisma Schema (Phase 1 + 2 + 3)
 // ──────────────────────────────────────────────
 
 generator client {
@@ -64,20 +58,26 @@ model Snapshot {
   @@index([marketId, capturedAt])
 }
 
-// ── Phase 2: Clusters ──
+// ── Clusters (Phase 2) ──
 
 model Cluster {
   id          String   @id @default(cuid())
   name        String   @unique
   description String   @default("")
-  theme       String   @default("other")  // e.g. "crypto", "rates", "elections"
+  theme       String   @default("other")
 
-  // Computed analytics (updated by cron / seed)
-  avgProbability      Float @default(0)   // mean yesPrice across member markets
-  probabilityDispersion Float @default(0) // std dev of yesPrices
-  inconsistencyScore  Float @default(0)   // 0–100, how much members disagree
-  divergenceScore     Float @default(0)   // 0–100, cross-market dislocation
-  confidenceScore     Float @default(0)   // 0–100, how trustworthy the signal is
+  // Phase 2 analytics
+  avgProbability        Float @default(0)
+  probabilityDispersion Float @default(0)
+  inconsistencyScore    Float @default(0)
+  divergenceScore       Float @default(0)
+  confidenceScore       Float @default(0)
+
+  // Phase 3 fields
+  rankingScore    Float  @default(0)   // 0–100 composite ranking for top signals
+  classification  String @default("[]") // JSON array of classification labels
+  explanation     String @default("")   // human-readable summary of why flagged
+  expressions     String @default("[]") // JSON array of research expressions
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -86,6 +86,7 @@ model Cluster {
   signals     ClusterSignal[]
 
   @@index([divergenceScore])
+  @@index([rankingScore])
   @@index([theme])
 }
 
@@ -106,10 +107,10 @@ model ClusterSignal {
   clusterId String
   cluster   Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
 
-  type      String  // "disagreement" | "reprice_lag" | "thin_liquidity" | "unusual_activity"
-  severity  String  // "low" | "medium" | "high"
-  message   String  // human-readable explanation
-  data      String  @default("{}")  // JSON blob with supporting numbers
+  type      String
+  severity  String
+  message   String
+  data      String  @default("{}")
 
   createdAt DateTime @default(now())
 

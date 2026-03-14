@@ -1,11 +1,10 @@
 // ──────────────────────────────────────────────
-// Seed script – Phase 1 markets + Phase 2 clusters
+// Seed script – Phase 1 markets + Phase 2 clusters + Phase 3 signals
 // Run: npm run db:seed
 // ──────────────────────────────────────────────
 
 import { PrismaClient } from "@prisma/client";
-import { computeClusterAnalytics } from "../src/lib/cluster-analytics";
-import { detectClusterSignals } from "../src/lib/cluster-signals";
+import { computeCluster } from "../src/lib/cluster-compute";
 
 const prisma = new PrismaClient();
 
@@ -272,7 +271,7 @@ const CLUSTERS = [
 ];
 
 async function main() {
-  console.log("Seeding Event Edge database (Phase 1 + Phase 2)...\n");
+  console.log("Seeding Event Edge database (Phase 1 + 2 + 3)...\n");
 
   // Clear everything (order matters for FK constraints)
   await prisma.clusterSignal.deleteMany();
@@ -334,9 +333,8 @@ async function main() {
 
   console.log(`\n  Seeded ${MARKETS.length} markets with snapshots and scores.\n`);
 
-  // ── Phase 2: Create clusters, link markets, compute analytics ──
+  // ── Phase 2 + 3: Create clusters, link markets, compute everything ──
 
-  // Re-fetch markets with updated scores
   const freshMarkets = await prisma.market.findMany();
   const freshMap = new Map(freshMarkets.map((m) => [m.externalId, m]));
 
@@ -345,7 +343,6 @@ async function main() {
       data: { name: c.name, description: c.description, theme: c.theme },
     });
 
-    // Link markets
     for (const extId of c.marketIds) {
       const mktId = marketMap.get(extId);
       if (mktId) {
@@ -355,21 +352,29 @@ async function main() {
       }
     }
 
-    // Gather members for analytics
     const members = c.marketIds
       .map((extId) => freshMap.get(extId))
       .filter((m): m is NonNullable<typeof m> => m !== undefined);
 
-    // Compute analytics
-    const analytics = computeClusterAnalytics(members);
+    // Compute Phase 2 analytics + Phase 3 ranking/classification/expressions
+    const result = computeCluster(c.name, c.theme, members);
+
     await prisma.cluster.update({
       where: { id: cluster.id },
-      data: analytics,
+      data: {
+        avgProbability: result.avgProbability,
+        probabilityDispersion: result.probabilityDispersion,
+        inconsistencyScore: result.inconsistencyScore,
+        divergenceScore: result.divergenceScore,
+        confidenceScore: result.confidenceScore,
+        rankingScore: result.rankingScore,
+        classification: result.classification,
+        explanation: result.explanation,
+        expressions: result.expressions,
+      },
     });
 
-    // Detect and store signals
-    const signals = detectClusterSignals(members, analytics.avgProbability, analytics.probabilityDispersion);
-    for (const sig of signals) {
+    for (const sig of result.signals) {
       await prisma.clusterSignal.create({
         data: {
           clusterId: cluster.id,
@@ -381,7 +386,9 @@ async function main() {
       });
     }
 
-    console.log(`  ✓ Cluster: ${c.name} (${c.marketIds.length} markets, ${signals.length} signals)`);
+    const labels = JSON.parse(result.classification);
+    const exprs = JSON.parse(result.expressions);
+    console.log(`  ✓ Cluster: ${c.name} (${members.length} markets, ${result.signals.length} signals, ${labels.length} labels, ${exprs.length} expressions, rank=${result.rankingScore})`);
   }
 
   console.log(`\n  Seeded ${CLUSTERS.length} clusters.`);

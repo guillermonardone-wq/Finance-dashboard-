@@ -39,6 +39,12 @@ export default function RootLayout({
             >
               Flagged
             </a>
+            <a
+              href="/signals"
+              className="text-sm text-gray-400 hover:text-white transition"
+            >
+              Signals
+            </a>
           </div>
         </nav>
         <main className="max-w-7xl mx-auto px-4 py-6">{children}</main>
