@@ -1,0 +1,62 @@
+// ──────────────────────────────────────────────
+// Event Edge – Prisma Schema (Phase 1)
+// ──────────────────────────────────────────────
+// Market        → one prediction-market question
+// Snapshot      → a point-in-time price/volume capture
+// ──────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Market {
+  id              String     @id @default(cuid())
+  externalId      String     @unique             // ID from the source (e.g. Polymarket slug)
+  source          String     @default("polymarket")
+  title           String
+  description     String     @default("")
+  category        String     @default("other")
+  imageUrl        String?
+
+  yesPrice        Float                          // latest YES token price (0–1)
+  noPrice         Float                          // latest NO  token price (0–1)
+  spread          Float                          // |yes - (1 - no)|
+  volume24h       Float      @default(0)         // 24-hour trading volume ($)
+  liquidity       Float      @default(0)         // total liquidity ($)
+
+  resolutionDate  DateTime?
+  active          Boolean    @default(true)
+
+  // ── Dislocation score ──
+  dislocationScore Float     @default(0)         // 0–100 composite score
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  snapshots       Snapshot[]
+
+  @@index([category])
+  @@index([dislocationScore])
+  @@index([active])
+}
+
+model Snapshot {
+  id          String   @id @default(cuid())
+  marketId    String
+  market      Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  yesPrice    Float
+  noPrice     Float
+  spread      Float
+  volume24h   Float
+  liquidity   Float
+
+  capturedAt  DateTime @default(now())
+
+  @@index([marketId, capturedAt])
+}
