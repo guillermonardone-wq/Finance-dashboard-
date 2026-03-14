@@ -1,0 +1,321 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// User (minimal for MVP, expand later)
+// ─────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions Session[]
+}
+
+// ─────────────────────────────────────────────
+// Track and Corner Definitions
+// ─────────────────────────────────────────────
+
+model Track {
+  id           String  @id @default(uuid())
+  name         String
+  location     String // e.g. "Monterey, CA"
+  country      String
+  lengthMeters Float? // total track length
+
+  // Start/finish line defined as two GPS points (a gate)
+  sfLineLat1    Float
+  sfLineLng1    Float
+  sfLineLat2    Float
+  sfLineLng2    Float
+  sfLineHeading Float? // expected crossing heading (degrees)
+
+  // Track outline as a simplified GPS polygon (for map display)
+  outlineJson Json? // [{lat, lng}, ...] array
+
+  // Track Builder metadata
+  source String @default("seed") // "seed" or "builder"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  corners   TrackCorner[]
+  sessions  Session[]
+  gpsTraces TrackGpsTrace[]
+}
+
+model TrackGpsTrace {
+  id          String    @id @default(uuid())
+  trackId     String
+  track       Track     @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  storageKey  String // object storage key
+  sampleCount Int
+  recordedAt  DateTime?
+  deviceInfo  String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+}
+
+model TrackCorner {
+  id              String @id @default(uuid())
+  trackId         String
+  track           Track  @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  number          Int // sequential corner number
+  name            String? // e.g. "Turn 1", "The Corkscrew"
+  entryLat        Float
+  entryLng        Float
+  apexLat         Float
+  apexLng         Float
+  exitLat         Float
+  exitLng         Float
+  toleranceMeters Float  @default(15)
+  type            String? // "hairpin", "sweeper", "chicane", "kink"
+  direction       String? // "left", "right"
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  analyses CornerAnalysis[]
+
+  @@unique([trackId, number])
+}
+
+// ─────────────────────────────────────────────
+// Session
+// ─────────────────────────────────────────────
+
+model Session {
+  id        String        @id @default(uuid())
+  userId    String?
+  user      User?         @relation(fields: [userId], references: [id])
+  trackId   String
+  track     Track         @relation(fields: [trackId], references: [id])
+  name      String
+  date      DateTime
+  carName   String?
+  carNotes  String?
+  conditions String?
+  status    SessionStatus @default(CREATED)
+
+  // Data quality (populated after upload)
+  gpsSampleRateHz Float?
+  imuSampleRateHz Float?
+  dataQuality     String? // "good", "fair", "poor"
+  totalSamples    Int?
+  durationSeconds Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sensorUploads SensorUpload[]
+  videoUploads  VideoUpload[]
+  laps          Lap[]
+  analysis      SessionAnalysis?
+  coaching      CoachingResult?
+  analysisJobs  AnalysisJob[]
+
+  @@index([userId])
+  @@index([trackId])
+  @@index([date(sort: Desc)])
+  @@index([status])
+}
+
+enum SessionStatus {
+  CREATED
+  DATA_UPLOADED
+  ANALYZING
+  ANALYSIS_COMPLETE
+  ANALYSIS_FAILED
+}
+
+// ─────────────────────────────────────────────
+// Analysis Job (Redis job tracking)
+// ─────────────────────────────────────────────
+
+model AnalysisJob {
+  id              String    @id @default(uuid())
+  sessionId       String
+  session         Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  redisJobId      String?
+  status          String    @default("queued") // "queued", "processing", "completed", "failed"
+  stage           String? // "lap_detection", "corner_segmentation", "behavior_analysis", "coaching", "audio_generation"
+  progressPercent Int       @default(0)
+  errorMessage    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([sessionId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// Uploads (file references)
+// ─────────────────────────────────────────────
+
+model SensorUpload {
+  id          String    @id @default(uuid())
+  sessionId   String
+  session     Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  storageKey  String // object storage key
+  fileName    String
+  fileSize    Int // bytes
+  format      String // "json", "csv"
+  sampleCount Int?
+  startTime   DateTime?
+  endTime     DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model VideoUpload {
+  id                String  @id @default(uuid())
+  sessionId         String
+  session           Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  storageKey        String
+  fileName          String
+  fileSize          Int
+  durationSeconds   Float?
+  resolution        String?
+  syncOffsetSeconds Float   @default(0)
+  createdAt         DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────
+// Laps
+// ─────────────────────────────────────────────
+
+model Lap {
+  id             String  @id @default(uuid())
+  sessionId      String
+  session        Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  lapNumber      Int
+  startTime      Float // seconds since session start
+  endTime        Float
+  lapTimeSeconds Float
+  isValid        Boolean @default(true)
+  invalidReason  String?
+  maxSpeedKmh    Float?
+  avgSpeedKmh    Float?
+  maxLateralG    Float?
+  maxBrakingG    Float?
+  createdAt      DateTime @default(now())
+
+  cornerAnalyses CornerAnalysis[]
+
+  @@unique([sessionId, lapNumber])
+  @@index([sessionId])
+}
+
+// ─────────────────────────────────────────────
+// Corner Analysis (per corner, per lap)
+// ─────────────────────────────────────────────
+
+model CornerAnalysis {
+  id            String      @id @default(uuid())
+  lapId         String
+  lap           Lap         @relation(fields: [lapId], references: [id], onDelete: Cascade)
+  trackCornerId String
+  trackCorner   TrackCorner @relation(fields: [trackCornerId], references: [id])
+  cornerNumber  Int
+
+  // Timing
+  entryTime         Float
+  apexTime          Float
+  exitTime          Float
+  cornerTimeSeconds Float
+
+  // Speeds (km/h) — MEASURED
+  entrySpeedKmh Float
+  minSpeedKmh   Float
+  exitSpeedKmh  Float
+
+  // Accelerations — MEASURED
+  peakLateralG Float
+  peakBrakingG Float
+  exitAccelG   Float?
+
+  // Braking — INFERRED
+  brakingOnsetTime      Float?
+  brakingDistanceMeters Float?
+
+  // Line / Apex — INFERRED
+  apexOffsetMeters Float?
+  apexTimingOffset Float?
+
+  // Comparison to best
+  deltaVsBestSeconds Float?
+  deltaEntrySpeed    Float?
+  deltaExitSpeed     Float?
+
+  // Confidence
+  confidence       Float @default(0.5)
+  dataQualityFlags Json?
+
+  createdAt DateTime @default(now())
+
+  @@unique([lapId, cornerNumber])
+  @@index([lapId])
+  @@index([trackCornerId])
+}
+
+// ─────────────────────────────────────────────
+// Session-Level Analysis
+// ─────────────────────────────────────────────
+
+model SessionAnalysis {
+  id        String  @id @default(uuid())
+  sessionId String  @unique
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  totalLaps    Int
+  validLaps    Int
+  bestLapNumber Int?
+  bestLapTime   Float?
+  medianLapTime Float?
+  consistency   Float? // std dev of lap times
+
+  analysisVersion      String
+  processingTimeMs     Int
+  rawResultsStorageKey String?
+
+  status       String @default("completed")
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// Coaching Results
+// ─────────────────────────────────────────────
+
+model CoachingResult {
+  id        String  @id @default(uuid())
+  sessionId String  @unique
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  lapNumber Int?
+
+  cornerCoaching   Json // [{cornerNumber, coachingText, confidence, ...}]
+  summaryText      String
+  top3Improvements Json // [{cornerNumber, suggestion, estimatedTimeSave}]
+
+  audioScript     String?
+  audioStorageKey String?
+
+  modelUsed     String?
+  promptVersion String?
+  generatedAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
