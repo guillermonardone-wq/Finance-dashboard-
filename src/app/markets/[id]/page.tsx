@@ -3,57 +3,31 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import type { MarketDetail } from "@/lib/types";
 import { pct, usd, timeUntil, scoreColor, scoreBg } from "@/lib/format";
 import SnapshotChart from "../../components/SnapshotChart";
 
-interface Snapshot {
-  id: string;
-  yesPrice: number;
-  noPrice: number;
-  spread: number;
-  volume24h: number;
-  liquidity: number;
-  capturedAt: string;
-}
-
-interface MarketDetail {
-  id: string;
-  externalId: string;
-  source: string;
-  title: string;
-  description: string;
-  category: string;
-  yesPrice: number;
-  noPrice: number;
-  spread: number;
-  volume24h: number;
-  liquidity: number;
-  resolutionDate: string | null;
-  dislocationScore: number;
-  active: boolean;
-  createdAt: string;
-  snapshots: Snapshot[];
-}
-
 export default function MarketDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string }>();
+  const id = params?.id;
   const [market, setMarket] = useState<MarketDetail | null>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!id) return;
     fetch(`/api/markets/${id}`)
       .then((r) => {
-        if (!r.ok) throw new Error("Not found");
+        if (!r.ok) throw new Error(r.status === 404 ? "Market not found" : `Error ${r.status}`);
         return r.json();
       })
       .then(setMarket)
-      .catch(() => setError(true));
+      .catch((e) => setError(e.message));
   }, [id]);
 
   if (error) {
     return (
       <div className="text-center py-20 text-gray-400">
-        Market not found.{" "}
+        {error}.{" "}
         <a href="/" className="text-indigo-400 hover:underline">
           Back to dashboard
         </a>
@@ -67,7 +41,6 @@ export default function MarketDetailPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Back link */}
       <a
         href="/"
         className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white mb-4 transition"
@@ -75,7 +48,7 @@ export default function MarketDetailPage() {
         &larr; All Markets
       </a>
 
-      {/* Title section */}
+      {/* Title + score */}
       <div className="flex items-start gap-4 mb-6">
         <div className="flex-1">
           <span className="text-xs font-medium uppercase tracking-wider text-indigo-400">

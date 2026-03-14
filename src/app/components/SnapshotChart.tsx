@@ -1,5 +1,4 @@
-// Simple ASCII-style probability chart using pure CSS bars
-// (No charting library needed for Phase 1)
+// Simple probability chart using pure CSS bars (no charting library for Phase 1)
 "use client";
 
 import { pct } from "@/lib/format";
@@ -14,7 +13,7 @@ interface Props {
 }
 
 export default function SnapshotChart({ snapshots }: Props) {
-  // Show most recent first, reversed so left=oldest
+  // Show oldest on left, newest on right
   const data = [...snapshots].reverse().slice(-20);
 
   if (data.length === 0) {
@@ -32,11 +31,11 @@ export default function SnapshotChart({ snapshots }: Props) {
   return (
     <div>
       <div className="flex items-end gap-1 h-32">
-        {data.map((snap, i) => {
+        {data.map((snap) => {
           const height = ((snap.yesPrice - min) / range) * 100;
           return (
             <div
-              key={i}
+              key={snap.capturedAt}
               className="flex-1 group relative"
               title={`${pct(snap.yesPrice)} at ${new Date(snap.capturedAt).toLocaleString()}`}
             >

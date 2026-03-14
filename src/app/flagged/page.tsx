@@ -2,30 +2,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Market } from "@/lib/types";
 import MarketCard from "../components/MarketCard";
-
-interface Market {
-  id: string;
-  title: string;
-  category: string;
-  yesPrice: number;
-  noPrice: number;
-  spread: number;
-  volume24h: number;
-  liquidity: number;
-  resolutionDate: string | null;
-  dislocationScore: number;
-}
 
 export default function FlaggedPage() {
   const [markets, setMarkets] = useState<Market[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetch("/api/markets?sort=dislocation")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load markets (${r.status})`);
+        return r.json();
+      })
       .then((data: Market[]) => {
         setMarkets(data.filter((m) => m.dislocationScore >= 40));
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(e.message);
         setLoading(false);
       });
   }, []);
@@ -42,6 +38,8 @@ export default function FlaggedPage() {
 
       {loading ? (
         <div className="text-center text-gray-500 py-12">Loading...</div>
+      ) : error ? (
+        <div className="text-center text-red-400 py-12">{error}</div>
       ) : markets.length === 0 ? (
         <div className="text-center text-gray-500 py-12">
           No flagged markets right now. Check back after running{" "}

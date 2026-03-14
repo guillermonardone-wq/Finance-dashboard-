@@ -2,43 +2,39 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Market } from "@/lib/types";
 import MarketCard from "./components/MarketCard";
 import CategoryFilter from "./components/CategoryFilter";
 import SortSelect from "./components/SortSelect";
-
-interface Market {
-  id: string;
-  title: string;
-  category: string;
-  yesPrice: number;
-  noPrice: number;
-  spread: number;
-  volume24h: number;
-  liquidity: number;
-  resolutionDate: string | null;
-  dislocationScore: number;
-}
 
 export default function HomePage() {
   const [markets, setMarkets] = useState<Market[]>([]);
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("dislocation");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setLoading(true);
+    setError("");
     const qs = new URLSearchParams({ category, sort });
     fetch(`/api/markets?${qs}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load markets (${r.status})`);
+        return r.json();
+      })
       .then((data) => {
         setMarkets(data);
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(e.message);
         setLoading(false);
       });
   }, [category, sort]);
 
   return (
     <div>
-      {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold mb-1">All Markets</h1>
         <p className="text-sm text-gray-400">
@@ -46,7 +42,6 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap items-center gap-4 mb-6">
         <CategoryFilter active={category} onChange={setCategory} />
         <div className="ml-auto">
@@ -54,9 +49,10 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Grid */}
       {loading ? (
         <div className="text-center text-gray-500 py-12">Loading markets...</div>
+      ) : error ? (
+        <div className="text-center text-red-400 py-12">{error}</div>
       ) : markets.length === 0 ? (
         <div className="text-center text-gray-500 py-12">
           No markets found. Run <code className="text-indigo-400">npm run db:seed</code> to
