@@ -22,7 +22,7 @@ export default function RootLayout({
               <span className="text-white">Edge</span>
             </a>
             <a
-              href="/"
+              href="/markets"
               className="text-sm text-gray-400 hover:text-white transition"
             >
               All Markets
