@@ -6,9 +6,10 @@ import { useMarketStore } from '../store/useMarketStore';
 import { ClassificationBadge, CompositeScoreBar } from '../components/common/ScoreDisplay';
 
 const PROVIDER_HINTS = {
-  AlphaVantage: 'Add ALPHAVANTAGE_API_KEY to .env to enable market data.',
-  Finnhub: 'Add FINNHUB_API_KEY to .env to enable prices and calendar.',
-  NewsAPI: 'Add NEWSAPI_KEY to .env to enable news headlines.',
+  alpha_vantage: 'Add ALPHA_VANTAGE_API_KEY to .env to enable market data.',
+  finnhub: 'Add FINNHUB_API_KEY to .env to enable prices and calendar.',
+  newsapi: 'Add NEWSAPI_API_KEY to .env to enable news headlines.',
+  unusual_whales: 'Add UNUSUAL_WHALES_API_KEY to .env for options flow and dark pool.',
 };
 
 export default function Dashboard() {

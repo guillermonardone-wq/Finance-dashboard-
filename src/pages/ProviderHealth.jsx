@@ -71,6 +71,7 @@ export default function ProviderHealth() {
           <p>ALPHA_VANTAGE_API_KEY — price, macro, news, sentiment</p>
           <p>FINNHUB_API_KEY — price, calendar, news, sentiment</p>
           <p>NEWSAPI_API_KEY — news headlines</p>
+          <p>UNUSUAL_WHALES_API_KEY — options flow, dark pool, congressional trades, news</p>
         </div>
       </div>
     </div>

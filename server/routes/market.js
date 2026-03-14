@@ -116,4 +116,76 @@ router.post('/watchlist', async (req, res) => {
   }
 });
 
+// --- Unusual Whales specific endpoints ---
+
+// GET options flow (all)
+router.get('/options-flow', async (req, res) => {
+  try {
+    const provider = registry.getProvider('unusual_whales');
+    if (!provider?.enabled) {
+      return res.json({ success: false, error: 'Unusual Whales provider not configured', data: [] });
+    }
+    const data = await provider.getOptionsFlow(null);
+    res.json({ success: true, data, provider: 'unusual_whales', source_attribution: 'Unusual Whales - Options Flow' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET options flow (by ticker)
+router.get('/options-flow/:ticker', async (req, res) => {
+  try {
+    const provider = registry.getProvider('unusual_whales');
+    if (!provider?.enabled) {
+      return res.json({ success: false, error: 'Unusual Whales provider not configured', data: [] });
+    }
+    const data = await provider.getOptionsFlow(req.params.ticker);
+    res.json({ success: true, data, provider: 'unusual_whales', source_attribution: 'Unusual Whales - Options Flow' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET dark pool activity (all)
+router.get('/darkpool', async (req, res) => {
+  try {
+    const provider = registry.getProvider('unusual_whales');
+    if (!provider?.enabled) {
+      return res.json({ success: false, error: 'Unusual Whales provider not configured', data: [] });
+    }
+    const data = await provider.getDarkPoolActivity(null);
+    res.json({ success: true, data, provider: 'unusual_whales', source_attribution: 'Unusual Whales - Dark Pool' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET dark pool activity (by ticker)
+router.get('/darkpool/:ticker', async (req, res) => {
+  try {
+    const provider = registry.getProvider('unusual_whales');
+    if (!provider?.enabled) {
+      return res.json({ success: false, error: 'Unusual Whales provider not configured', data: [] });
+    }
+    const data = await provider.getDarkPoolActivity(req.params.ticker);
+    res.json({ success: true, data, provider: 'unusual_whales', source_attribution: 'Unusual Whales - Dark Pool' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET congressional trades
+router.get('/congress', async (req, res) => {
+  try {
+    const provider = registry.getProvider('unusual_whales');
+    if (!provider?.enabled) {
+      return res.json({ success: false, error: 'Unusual Whales provider not configured', data: [] });
+    }
+    const data = await provider.getCongressionalTrades();
+    res.json({ success: true, data, provider: 'unusual_whales', source_attribution: 'Unusual Whales - Congressional Trades' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

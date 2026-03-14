@@ -61,6 +61,11 @@ export const api = {
   getLatestPMAssessment: (thesisId) => request(`/prediction-markets/assessments/thesis/${thesisId}/latest`),
   computePMAssessment: (thesisId) => request(`/prediction-markets/assessments/thesis/${thesisId}/compute`, { method: 'POST' }),
 
+  // Unusual Whales
+  getOptionsFlow: (ticker) => request(`/market/options-flow${ticker ? '/' + ticker : ''}`),
+  getDarkPool: (ticker) => request(`/market/darkpool${ticker ? '/' + ticker : ''}`),
+  getCongressTrades: () => request('/market/congress'),
+
   // Health
   getHealth: () => request('/health'),
 };

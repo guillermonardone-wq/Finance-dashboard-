@@ -53,40 +53,44 @@ router.post('/', (req, res) => {
     }
   }
 
-  db.prepare(`
-    INSERT INTO theses (
-      id, created_at, updated_at, title, thesis_statement, causal_chain,
-      affected_assets, expected_timeline, probability_low, probability_high, probability_best,
-      market_pricing_assessment, key_assumptions, alternative_explanations,
-      leading_indicators, confirming_indicators, invalidating_indicators,
-      coincident_indicators, lagging_indicators,
-      disconfirming_evidence, strongest_bear_case, what_would_make_opposite_stronger,
-      early_vs_right, status, classification, tags
-    ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-    )
-  `).run(
-    id, now, now, t.title, t.thesis_statement,
-    JSON.stringify(t.causal_chain || []),
-    JSON.stringify(t.affected_assets || []),
-    JSON.stringify(t.expected_timeline || {}),
-    t.probability_low, t.probability_high, t.probability_best,
-    JSON.stringify(t.market_pricing_assessment || {}),
-    JSON.stringify(t.key_assumptions || []),
-    JSON.stringify(t.alternative_explanations || []),
-    JSON.stringify(t.leading_indicators || []),
-    JSON.stringify(t.confirming_indicators || []),
-    JSON.stringify(t.invalidating_indicators || []),
-    JSON.stringify(t.coincident_indicators || []),
-    JSON.stringify(t.lagging_indicators || []),
-    JSON.stringify(t.disconfirming_evidence || []),
-    t.strongest_bear_case,
-    t.what_would_make_opposite_stronger,
-    t.early_vs_right || null,
-    t.status || 'draft',
-    t.classification || 'WATCH',
-    JSON.stringify(t.tags || [])
-  );
+  try {
+    db.prepare(`
+      INSERT INTO theses (
+        id, created_at, updated_at, title, thesis_statement, causal_chain,
+        affected_assets, expected_timeline, probability_low, probability_high, probability_best,
+        market_pricing_assessment, key_assumptions, alternative_explanations,
+        leading_indicators, confirming_indicators, invalidating_indicators,
+        coincident_indicators, lagging_indicators,
+        disconfirming_evidence, strongest_bear_case, what_would_make_opposite_stronger,
+        early_vs_right, status, classification, tags
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )
+    `).run(
+      id, now, now, t.title, t.thesis_statement,
+      JSON.stringify(t.causal_chain || []),
+      JSON.stringify(t.affected_assets || []),
+      JSON.stringify(t.expected_timeline || {}),
+      t.probability_low ?? 0.2, t.probability_high ?? 0.6, t.probability_best ?? 0.4,
+      JSON.stringify(t.market_pricing_assessment || {}),
+      JSON.stringify(t.key_assumptions || []),
+      JSON.stringify(t.alternative_explanations || []),
+      JSON.stringify(t.leading_indicators || []),
+      JSON.stringify(t.confirming_indicators || []),
+      JSON.stringify(t.invalidating_indicators || []),
+      JSON.stringify(t.coincident_indicators || []),
+      JSON.stringify(t.lagging_indicators || []),
+      JSON.stringify(t.disconfirming_evidence || []),
+      t.strongest_bear_case || '',
+      t.what_would_make_opposite_stronger || '',
+      t.early_vs_right || null,
+      t.status || 'draft',
+      t.classification || 'WATCH',
+      JSON.stringify(t.tags || [])
+    );
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 
   const created = db.prepare('SELECT * FROM theses WHERE id = ?').get(id);
   res.status(201).json(parseJsonFields(created));

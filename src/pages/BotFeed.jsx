@@ -26,7 +26,14 @@ export default function BotFeed() {
     setError(null);
     try {
       const res = await fetch('/api/bot/scan', { method: 'POST' });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: `Server error: ${res.status}` }));
+        throw new Error(errData.error || `Scan failed with status ${res.status}`);
+      }
       const data = await res.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
       setResult(data);
     } catch (err) {
       setError(err.message);
