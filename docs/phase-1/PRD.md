@@ -1,8 +1,8 @@
 # Racing Coach MVP — Product Requirements Document
 
-**Version:** 1.0
+**Version:** 1.1
 **Date:** 2026-03-14
-**Status:** Phase 1 — Planning
+**Status:** Phase 1 — Planning (Revised)
 
 ---
 
@@ -69,13 +69,21 @@ The product records phone sensor data during a track session, detects laps and c
 | US-10 | As a driver, I want to see a list of all laps with their times so I can pick which ones to analyze | P0 |
 | US-11 | As a driver, I want to manually set the start/finish line if automatic detection fails | P1 |
 
+### Track Management
+
+| ID | Story | Priority |
+|----|-------|----------|
+| US-19 | As an admin/power user, I want to upload a GPS trace from a track and define corner boundaries so I can add new tracks to the system | P0 | <!-- ADDED in v1.1: Track Builder -->
+| US-20 | As an admin/power user, I want to name corners, set entry/apex/exit points, and classify corner type so the coaching is track-aware | P0 | <!-- ADDED in v1.1: Track Builder -->
+| US-21 | As a driver, I want to see the track I'm driving visualized with labeled corners so I understand the analysis context | P1 | <!-- ADDED in v1.1: Track Builder -->
+
 ### Analysis
 
 | ID | Story | Priority |
 |----|-------|----------|
 | US-12 | As a driver, I want the app to segment each lap into individual corners so I can see corner-by-corner performance | P0 |
 | US-13 | As a driver, I want the app to infer my braking zones, turn-in points, apex timing, and corner exit quality | P0 |
-| US-14 | As a driver, I want to compare two laps side-by-side to see where I gained or lost time | P1 |
+| US-14 | As a driver, I want to compare any lap against my best lap to see where I gained or lost time per corner | P0 | <!-- CHANGED in v1.1: promoted to P0, clarified scope -->
 
 ### Coaching
 
@@ -83,7 +91,7 @@ The product records phone sensor data during a track session, detects laps and c
 |----|-------|----------|
 | US-15 | As a driver, I want a corner-by-corner coaching summary telling me what I did well and what to improve | P0 |
 | US-16 | As a driver, I want the top 3 improvement opportunities for my next session | P0 |
-| US-17 | As a driver, I want a short audio recap I can listen to before my next session | P0 |
+| US-17 | As a driver, I want a short audio recap (server-generated MP3) I can listen to before my next session via earbud | P0 | <!-- CHANGED in v1.1: server-side TTS -->
 | US-18 | As a driver, I want coaching language to be clear about what is directly measured vs. inferred | P0 |
 
 ---
@@ -94,14 +102,16 @@ The product records phone sensor data during a track session, detects laps and c
 
 1. **Session creation** — create, name, associate with a track
 2. **Sensor data capture/upload** — record from phone or upload CSV/JSON with timestamps, GPS (lat/lng/alt), accelerometer (x/y/z), gyroscope (x/y/z)
-3. **Track selection** — pick from a curated list of tracks with known layouts (start with 20–50 popular tracks, user can add custom via GPS trace)
+3. **Track selection** — pick from a curated list of tracks with known layouts (start with 20–50 popular tracks)
+3b. **Track Builder tool** — admin/power-user tool to upload a GPS trace, define start/finish line, and set corner boundaries (entry/apex/exit points, name, type) so new tracks can be added without code changes <!-- ADDED in v1.1 -->
 4. **Video upload** — upload a video file, store reference, basic playback
 5. **Lap detection** — detect start/finish line crossings from GPS trace
 6. **Corner segmentation** — divide each lap into corners using GPS trace + track map
 7. **Driving behavior inference** — infer braking zones, turn-in, apex, exit from sensor fusion (GPS speed changes + lateral G + yaw rate)
 8. **Corner-by-corner coaching** — text-based summary per corner with assessments
 9. **Top 3 improvements** — ranked list of where the driver loses the most time
-10. **Audio recap** — TTS-generated audio summary of coaching feedback
+9b. **Lap comparison** — compare any lap vs best lap: entry speed, corner minimum speed, exit acceleration, and time delta per corner <!-- ADDED in v1.1 -->
+10. **Audio recap** — server-generated MP3 audio summary of coaching feedback (via TTS API), downloadable and replayable <!-- CHANGED in v1.1: server-side TTS -->
 
 ### Out of Scope (v1 Non-Goals)
 
@@ -259,16 +269,19 @@ The fastest way to a working v1 is to **decouple data capture from analysis**, b
    - Communicate via REST API or job queue
    - Keep the boundary clean: Next.js sends raw data, Python returns structured analysis
 
-4. **Use Claude API for coaching text generation**
-   - Feed structured analysis data (per-corner metrics) into Claude
+4. **Use Claude API for coaching text generation — from structured data only** <!-- CHANGED in v1.1: clarified data boundary -->
+   - **Claude does NOT receive raw telemetry data.** The Python analysis engine processes raw sensor data and produces structured per-corner findings first
+   - Claude receives a structured JSON object per corner (e.g., `{entry_speed, best_entry_speed, brake_distance, optimal_brake_distance, exit_delay, confidence}`)
+   - Claude converts these structured findings into natural language coaching insights
    - Prompt engineering for racing-coach tone and honesty about confidence
    - Generates both text summaries and audio script
-   - Much faster than building custom NLG
 
-5. **Use browser TTS or a simple TTS API for audio**
-   - Don't build a custom voice model
-   - Browser SpeechSynthesis API for MVP
-   - Upgrade to ElevenLabs or similar for production quality later
+5. **Use server-side TTS API for audio** <!-- CHANGED in v1.1: replaced browser TTS -->
+   - Server generates MP3 files via TTS API (OpenAI TTS / ElevenLabs / similar)
+   - Consistent voice quality across all devices and browsers
+   - Audio files are cacheable and replayable (download for offline listening before next session)
+   - Reliable playback via single earbud — no browser TTS inconsistencies
+   - Audio stored in object storage alongside other generated files
 
 6. **Ship as a responsive web app**
    - No app store review process

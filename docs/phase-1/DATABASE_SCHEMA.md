@@ -1,21 +1,23 @@
 # Racing Coach MVP — Database Schema
 
-**Version:** 1.0
-**Date:** 2026-03-14
+**Version:** 1.1
+**Date:** 2026-03-14 (Revised)
 
 ---
 
 ## 1. Design Principles
 
-1. **PostgreSQL for structured data, filesystem for blobs** — sensor data files, video, and audio live on disk/S3, not in the database
+1. **PostgreSQL for structured data, object storage for blobs** — sensor data files, video, and audio live in S3-compatible object storage, not in the database <!-- CHANGED in v1.1 -->
 2. **Schema-ready for multi-user** — we include a `User` model even though MVP is single-user, to avoid a painful migration later
 3. **Analysis results stored as both structured columns and JSON** — key metrics as queryable columns, full detail as JSONB for flexibility
 4. **Timestamps everywhere** — every record has `createdAt` and `updatedAt`
-5. **Soft references to files** — file paths stored as strings, actual files on filesystem
+5. **Soft references to files** — object storage keys stored as strings, actual files in S3-compatible storage <!-- CHANGED in v1.1 -->
 
 ---
 
 ## 2. Entity Relationship Diagram
+
+<!-- CHANGED in v1.1: added TrackGpsTrace, AnalysisJob -->
 
 ```
 User (future)
@@ -34,11 +36,15 @@ User (future)
   │      │
   │      ├──< SessionAnalysis
   │      │
+  │      ├──< AnalysisJob
+  │      │
   │      └──< CoachingResult
   │
   Track
     │
-    └──< TrackCorner
+    ├──< TrackCorner
+    │
+    └──< TrackGpsTrace      ← ADDED in v1.1 (Track Builder)
 ```
 
 ---
@@ -89,11 +95,32 @@ model Track {
   sfLineHeading Float?                       // expected crossing heading (degrees) to filter wrong-way crossings
   // Track outline as a simplified GPS polygon (for map display)
   outlineJson Json?                          // [{lat, lng}, ...] array
+  // Track Builder metadata — ADDED in v1.1
+  source      String   @default("seed")      // "seed" (pre-loaded) or "builder" (user-created via Track Builder)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  corners  TrackCorner[]
-  sessions Session[]
+  corners   TrackCorner[]
+  sessions  Session[]
+  gpsTraces TrackGpsTrace[]                  // ADDED in v1.1
+}
+
+// ─────────────────────────────────────────────
+// Track GPS Trace (Track Builder) — ADDED in v1.1
+// ─────────────────────────────────────────────
+
+model TrackGpsTrace {
+  id            String   @id @default(uuid())
+  trackId       String
+  track         Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  // Object storage key to the raw GPS trace file used to define this track
+  storageKey    String                         // e.g. "racing-coach-tracks/{track_id}/gps_trace.json"
+  sampleCount   Int                            // number of GPS points in the trace
+  // Metadata about the source trace
+  recordedAt    DateTime?                      // when the trace was recorded
+  deviceInfo    String?                        // device used to record
+  notes         String?                        // user notes about the trace
+  createdAt     DateTime @default(now())
 }
 
 model TrackCorner {
@@ -152,6 +179,26 @@ model Session {
   laps           Lap[]
   analysis       SessionAnalysis?
   coaching       CoachingResult?
+  analysisJobs   AnalysisJob[]               // ADDED in v1.1
+}
+
+// ─────────────────────────────────────────────
+// Analysis Job (Redis job tracking) — ADDED in v1.1
+// ─────────────────────────────────────────────
+
+model AnalysisJob {
+  id             String   @id @default(uuid())
+  sessionId      String
+  session        Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  redisJobId     String?                       // BullMQ job ID in Redis
+  status         String   @default("queued")   // "queued", "processing", "completed", "failed"
+  stage          String?                       // current processing stage: "lap_detection", "corner_segmentation", "behavior_analysis", "coaching", "audio_generation"
+  progressPercent Int     @default(0)          // 0–100
+  errorMessage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 enum SessionStatus {
@@ -170,7 +217,7 @@ model SensorUpload {
   id          String   @id @default(uuid())
   sessionId   String
   session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  filePath    String                          // path to stored file
+  storageKey  String                          // object storage key (e.g. "sessions/{id}/sensors.json") — CHANGED in v1.1
   fileName    String                          // original filename
   fileSize    Int                             // bytes
   format      String                          // "json", "csv"
@@ -184,7 +231,7 @@ model VideoUpload {
   id          String   @id @default(uuid())
   sessionId   String
   session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  filePath    String
+  storageKey  String                          // object storage key — CHANGED in v1.1
   fileName    String
   fileSize    Int                             // bytes
   durationSeconds Float?
@@ -290,7 +337,7 @@ model SessionAnalysis {
   // Analysis metadata
   analysisVersion  String                     // version of analysis pipeline
   processingTimeMs Int                        // how long analysis took
-  rawResultsPath   String?                    // path to full analysis JSON on filesystem
+  rawResultsStorageKey String?                 // object storage key for full analysis JSON — CHANGED in v1.1
 
   // Status
   status           String  @default("completed")  // "completed", "partial", "failed"
@@ -320,7 +367,7 @@ model CoachingResult {
 
   // Audio
   audioScript       String?                   // text for TTS
-  audioFilePath     String?                   // path to generated audio file
+  audioStorageKey   String?                   // object storage key for generated MP3 audio — CHANGED in v1.1
 
   // Metadata
   modelUsed         String?                   // e.g. "claude-sonnet-4-6"
@@ -336,19 +383,23 @@ model CoachingResult {
 
 ## 4. Data Size Estimates
 
+<!-- CHANGED in v1.1: added AnalysisJob, TrackGpsTrace; updated filesystem → object storage -->
+
 | Entity | Rows per Session | Row Size | Notes |
 |--------|-----------------|----------|-------|
 | Session | 1 | ~500B | Metadata only |
-| SensorUpload | 1 | ~200B | File reference only; actual data is 5–50MB on disk |
-| VideoUpload | 0–1 | ~200B | File reference only; actual video is 500MB–2GB on disk |
+| SensorUpload | 1 | ~200B | Storage key reference; actual data is 5–50MB in object storage |
+| VideoUpload | 0–1 | ~200B | Storage key reference; actual video is 500MB–2GB in object storage |
 | Lap | 5–30 | ~200B | Typical track day session |
 | CornerAnalysis | 50–300 | ~500B | 10 corners × 5–30 laps |
 | SessionAnalysis | 1 | ~500B | Summary stats |
+| AnalysisJob | 1–3 | ~300B | Job tracking (re-analysis creates new rows) |
 | CoachingResult | 1 | ~5KB | Includes JSON coaching text |
 | TrackCorner | 10–20 per track | ~300B | Static data |
+| TrackGpsTrace | 1 per track | ~200B | Storage key reference; actual trace <1MB in object storage |
 
 **Per session total in PostgreSQL:** ~50KB–150KB (very manageable)
-**Per session on filesystem:** 5–50MB (sensor data) + 0–2GB (video)
+**Per session in object storage:** 5–50MB (sensor data) + 0–2GB (video) + ~1MB (audio recap)
 
 ---
 
@@ -372,6 +423,10 @@ CREATE INDEX idx_corner_analysis_track_corner ON "CornerAnalysis" ("trackCornerI
 
 -- Track corner queries
 CREATE INDEX idx_track_corner_track_id ON "TrackCorner" ("trackId");
+
+-- Analysis job queries — ADDED in v1.1
+CREATE INDEX idx_analysis_job_session_id ON "AnalysisJob" ("sessionId");
+CREATE INDEX idx_analysis_job_status ON "AnalysisJob" ("status");
 ```
 
 ---
