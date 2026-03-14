@@ -34,3 +34,35 @@ export interface Snapshot {
 export interface MarketDetail extends Market {
   snapshots: Snapshot[];
 }
+
+// ── Phase 2: Clusters ──
+
+export interface Cluster {
+  id: string;
+  name: string;
+  description: string;
+  theme: string;
+  avgProbability: number;
+  probabilityDispersion: number;
+  inconsistencyScore: number;
+  divergenceScore: number;
+  confidenceScore: number;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { markets: number };
+}
+
+export interface ClusterSignal {
+  id: string;
+  clusterId: string;
+  type: string;
+  severity: string;
+  message: string;
+  data: string;
+  createdAt: string;
+}
+
+export interface ClusterDetail extends Cluster {
+  markets: { market: Market }[];
+  signals: ClusterSignal[];
+}

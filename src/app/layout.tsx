@@ -28,6 +28,12 @@ export default function RootLayout({
               All Markets
             </a>
             <a
+              href="/clusters"
+              className="text-sm text-gray-400 hover:text-white transition"
+            >
+              Clusters
+            </a>
+            <a
               href="/flagged"
               className="text-sm text-gray-400 hover:text-white transition"
             >

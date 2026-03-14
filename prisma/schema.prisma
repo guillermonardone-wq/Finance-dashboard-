@@ -1,8 +1,11 @@
 // ──────────────────────────────────────────────
-// Event Edge – Prisma Schema (Phase 1)
+// Event Edge – Prisma Schema (Phase 1 + Phase 2)
 // ──────────────────────────────────────────────
-// Market        → one prediction-market question
-// Snapshot      → a point-in-time price/volume capture
+// Market         → one prediction-market question
+// Snapshot       → a point-in-time price/volume capture
+// Cluster        → a thematic group of related markets
+// ClusterMarket  → join table linking markets to clusters
+// ClusterSignal  → a flagged signal on a cluster
 // ──────────────────────────────────────────────
 
 generator client {
@@ -16,29 +19,29 @@ datasource db {
 
 model Market {
   id              String     @id @default(cuid())
-  externalId      String     @unique             // ID from the source (e.g. Polymarket slug)
+  externalId      String     @unique
   source          String     @default("polymarket")
   title           String
   description     String     @default("")
   category        String     @default("other")
   imageUrl        String?
 
-  yesPrice        Float                          // latest YES token price (0–1)
-  noPrice         Float                          // latest NO  token price (0–1)
-  spread          Float                          // |yes - (1 - no)|
-  volume24h       Float      @default(0)         // 24-hour trading volume ($)
-  liquidity       Float      @default(0)         // total liquidity ($)
+  yesPrice        Float
+  noPrice         Float
+  spread          Float
+  volume24h       Float      @default(0)
+  liquidity       Float      @default(0)
 
   resolutionDate  DateTime?
   active          Boolean    @default(true)
 
-  // ── Dislocation score ──
-  dislocationScore Float     @default(0)         // 0–100 composite score
+  dislocationScore Float     @default(0)
 
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
   snapshots       Snapshot[]
+  clusters        ClusterMarket[]
 
   @@index([category])
   @@index([dislocationScore])
@@ -59,4 +62,56 @@ model Snapshot {
   capturedAt  DateTime @default(now())
 
   @@index([marketId, capturedAt])
+}
+
+// ── Phase 2: Clusters ──
+
+model Cluster {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String   @default("")
+  theme       String   @default("other")  // e.g. "crypto", "rates", "elections"
+
+  // Computed analytics (updated by cron / seed)
+  avgProbability      Float @default(0)   // mean yesPrice across member markets
+  probabilityDispersion Float @default(0) // std dev of yesPrices
+  inconsistencyScore  Float @default(0)   // 0–100, how much members disagree
+  divergenceScore     Float @default(0)   // 0–100, cross-market dislocation
+  confidenceScore     Float @default(0)   // 0–100, how trustworthy the signal is
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  markets     ClusterMarket[]
+  signals     ClusterSignal[]
+
+  @@index([divergenceScore])
+  @@index([theme])
+}
+
+model ClusterMarket {
+  id        String  @id @default(cuid())
+  clusterId String
+  cluster   Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  marketId  String
+  market    Market  @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, marketId])
+  @@index([clusterId])
+  @@index([marketId])
+}
+
+model ClusterSignal {
+  id        String  @id @default(cuid())
+  clusterId String
+  cluster   Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  type      String  // "disagreement" | "reprice_lag" | "thin_liquidity" | "unusual_activity"
+  severity  String  // "low" | "medium" | "high"
+  message   String  // human-readable explanation
+  data      String  @default("{}")  // JSON blob with supporting numbers
+
+  createdAt DateTime @default(now())
+
+  @@index([clusterId, createdAt])
 }

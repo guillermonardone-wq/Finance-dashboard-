@@ -1,10 +1,12 @@
-// GET /api/cron – refresh market data and recalculate dislocation scores
+// GET /api/cron – refresh market data, recalculate dislocation + cluster scores
 // In production you'd call the Polymarket API here.
-// For Phase 1 this simulates small price movements and recalculates scores.
+// For Phase 1/2 this simulates small price movements and recalculates everything.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calculateDislocation } from "@/lib/dislocation";
+import { computeClusterAnalytics } from "@/lib/cluster-analytics";
+import { detectClusterSignals } from "@/lib/cluster-signals";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +14,11 @@ export async function GET() {
   const markets = await prisma.market.findMany({ where: { active: true } });
 
   if (markets.length === 0) {
-    return NextResponse.json({ updated: 0, timestamp: new Date().toISOString() });
+    return NextResponse.json({ updated: 0, clustersUpdated: 0, timestamp: new Date().toISOString() });
   }
 
-  // Phase 1: simulate new volume/liquidity per market, then compute averages
+  // ── Phase 1: simulate price drift, update markets ──
+
   const simulated = markets.map((mkt) => {
     const drift = (Math.random() - 0.5) * 0.04;
     const newYes = Math.max(0.01, Math.min(0.99, mkt.yesPrice + drift));
@@ -26,21 +29,17 @@ export async function GET() {
     return { mkt, newYes, newNo, newSpread, newVolume, newLiquidity };
   });
 
-  const avgVolume =
-    simulated.reduce((s, d) => s + d.newVolume, 0) / simulated.length;
-  const avgLiquidity =
-    simulated.reduce((s, d) => s + d.newLiquidity, 0) / simulated.length;
+  const avgVolume = simulated.reduce((s, d) => s + d.newVolume, 0) / simulated.length;
+  const avgLiquidity = simulated.reduce((s, d) => s + d.newLiquidity, 0) / simulated.length;
 
   let updated = 0;
 
   for (const { mkt, newYes, newNo, newSpread, newVolume, newLiquidity } of simulated) {
-    // Get the current latest snapshot BEFORE creating a new one (avoids race condition)
     const prevSnapshot = await prisma.snapshot.findFirst({
       where: { marketId: mkt.id },
       orderBy: { capturedAt: "desc" },
     });
 
-    // Save new snapshot
     await prisma.snapshot.create({
       data: {
         marketId: mkt.id,
@@ -52,7 +51,6 @@ export async function GET() {
       },
     });
 
-    // Calculate dislocation using the NEW values and the PREVIOUS snapshot's price
     const score = calculateDislocation({
       currentYes: newYes,
       previousYes: prevSnapshot?.yesPrice ?? null,
@@ -63,7 +61,6 @@ export async function GET() {
       avgLiquidity,
     });
 
-    // Update market with new prices and score
     await prisma.market.update({
       where: { id: mkt.id },
       data: {
@@ -79,5 +76,41 @@ export async function GET() {
     updated++;
   }
 
-  return NextResponse.json({ updated, timestamp: new Date().toISOString() });
+  // ── Phase 2: recompute cluster analytics + signals ──
+
+  const clusters = await prisma.cluster.findMany({
+    include: { markets: { include: { market: true } } },
+  });
+
+  let clustersUpdated = 0;
+
+  for (const cluster of clusters) {
+    const members = cluster.markets.map((cm) => cm.market);
+
+    const analytics = computeClusterAnalytics(members);
+    await prisma.cluster.update({
+      where: { id: cluster.id },
+      data: analytics,
+    });
+
+    // Replace old signals with fresh ones
+    await prisma.clusterSignal.deleteMany({ where: { clusterId: cluster.id } });
+
+    const signals = detectClusterSignals(members, analytics.avgProbability, analytics.probabilityDispersion);
+    for (const sig of signals) {
+      await prisma.clusterSignal.create({
+        data: {
+          clusterId: cluster.id,
+          type: sig.type,
+          severity: sig.severity,
+          message: sig.message,
+          data: JSON.stringify(sig.data),
+        },
+      });
+    }
+
+    clustersUpdated++;
+  }
+
+  return NextResponse.json({ updated, clustersUpdated, timestamp: new Date().toISOString() });
 }
