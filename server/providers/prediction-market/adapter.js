@@ -7,7 +7,13 @@
 // API-fetched data into the standard snapshot format.
 // ============================================================
 
-import { STALE_THRESHOLD_HOURS, THIN_MARKET_LIQUIDITY, THIN_MARKET_VOLUME_24H } from './types.js';
+import {
+  STALE_THRESHOLD_HOURS,
+  VERY_STALE_THRESHOLD_HOURS,
+  EXCLUDED_THRESHOLD_HOURS,
+  THIN_MARKET_LIQUIDITY,
+  THIN_MARKET_VOLUME_24H,
+} from './types.js';
 
 export class PredictionMarketAdapter {
   constructor(config = {}) {
@@ -17,11 +23,35 @@ export class PredictionMarketAdapter {
   }
 
   /**
+   * Get snapshot age in hours.
+   */
+  ageHours(observedAt) {
+    return (Date.now() - new Date(observedAt).getTime()) / (1000 * 3600);
+  }
+
+  /**
    * Check if a snapshot is stale based on observed_at timestamp.
    */
   isStale(observedAt) {
-    const ageHours = (Date.now() - new Date(observedAt).getTime()) / (1000 * 3600);
-    return ageHours > STALE_THRESHOLD_HOURS;
+    return this.ageHours(observedAt) > STALE_THRESHOLD_HOURS;
+  }
+
+  /**
+   * Check if a snapshot is beyond the hard exclusion cutoff (>48h).
+   */
+  isExcluded(observedAt) {
+    return this.ageHours(observedAt) > EXCLUDED_THRESHOLD_HOURS;
+  }
+
+  /**
+   * Graduated freshness factor: fresh=1.0, stale=0.5, very_stale=0.3, excluded=0.
+   */
+  freshnessFactor(observedAt) {
+    const age = this.ageHours(observedAt);
+    if (age > EXCLUDED_THRESHOLD_HOURS) return 0;
+    if (age > VERY_STALE_THRESHOLD_HOURS) return 0.3;
+    if (age > STALE_THRESHOLD_HOURS) return 0.5;
+    return 1.0;
   }
 
   /**

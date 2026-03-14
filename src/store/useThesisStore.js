@@ -83,17 +83,23 @@ export const useThesisStore = create((set, get) => ({
     // This provides a SUGGESTED score for market_confirmation_divergence
     // based on prediction market consensus. It is capped and does not
     // override manual scores or any other dimension.
+    //
+    // Safety gates:
+    // - Confidence must exceed 0.4 (was 0.2)
+    // - Must have at least 2 qualifying contracts
+    // - Uses sqrt curve to prevent saturation at moderate divergence
     let pmSuggestion = null;
     let pmExplanation = null;
     if (predictionMarketAssessment && predictionMarketAssessment.scoring_helpers) {
       const helpers = predictionMarketAssessment.scoring_helpers;
-      if (helpers.prediction_market_divergence != null && helpers.prediction_market_confidence > 0.2) {
-        // Map divergence to a 0-10 score: higher divergence = higher score
-        // (divergence itself is interesting signal, whether thesis is ahead or behind)
-        // Bounded: confidence-weighted, capped at 8 to prevent dominance
-        const rawScore = Math.min(8, helpers.prediction_market_divergence * 4);
+      const qualifyingCount = helpers.qualifying_contract_count ?? 0;
+      if (helpers.prediction_market_divergence != null
+          && helpers.prediction_market_confidence > 0.4
+          && qualifyingCount >= 2) {
+        // Graduated sqrt curve: only large, high-confidence divergences approach cap
+        const rawScore = Math.min(8, Math.sqrt(helpers.prediction_market_divergence * 10) * 3);
         pmSuggestion = Math.round(rawScore * 10) / 10;
-        pmExplanation = `Prediction market suggestion: ${pmSuggestion}/10 (confidence: ${(helpers.prediction_market_confidence * 100).toFixed(0)}%). ${helpers.prediction_market_commentary}`;
+        pmExplanation = `Prediction market suggestion: ${pmSuggestion}/10 (confidence: ${(helpers.prediction_market_confidence * 100).toFixed(0)}%, ${qualifyingCount} contracts). ${helpers.prediction_market_commentary}`;
       }
     }
 

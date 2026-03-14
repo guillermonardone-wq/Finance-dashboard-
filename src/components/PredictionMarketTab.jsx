@@ -42,6 +42,11 @@ export default function PredictionMarketTab({ thesis }) {
         Prediction market data is evidence, not authority. It cannot override gates, classification, or risk controls.
       </div>
 
+      {/* Assessment staleness warning */}
+      {assessment && assessment.assessment && (
+        <AssessmentStalenessNotice assessment={assessment.assessment} />
+      )}
+
       {/* Consensus Comparison Block */}
       {assessment && assessment.assessment && (
         <ConsensusComparisonBlock thesis={thesis} assessment={assessment.assessment} helpers={assessment.scoring_helpers} />
@@ -77,23 +82,28 @@ export default function PredictionMarketTab({ thesis }) {
         )}
       </div>
 
-      {/* Assessment History */}
+      {/* Contract Analysis Detail */}
       {assessment && assessment.contracts && assessment.contracts.length > 0 && (
         <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
           <h3 className="text-sm font-bold text-slate-300 mb-3">Contract Analysis Detail</h3>
           {assessment.contracts.map((c, i) => (
-            <div key={i} className="text-xs text-slate-400 py-2 border-b border-slate-800/30 last:border-0">
+            <div key={i} className={`text-xs text-slate-400 py-2 border-b border-slate-800/30 last:border-0 ${c.is_excluded ? 'opacity-40' : ''}`}>
               <div className="flex justify-between">
                 <span className="text-slate-300">{c.event_title}</span>
-                <span className={c.weight > 0.3 ? 'text-emerald-400' : c.weight > 0.1 ? 'text-amber-400' : 'text-red-400'}>
-                  weight: {c.weight.toFixed(2)}
+                <span className={c.is_excluded ? 'text-red-500' : c.weight > 0.3 ? 'text-emerald-400' : c.weight > 0.1 ? 'text-amber-400' : 'text-red-400'}>
+                  {c.is_excluded ? 'EXCLUDED (>48h)' : `weight: ${c.weight.toFixed(2)}`}
                 </span>
               </div>
-              <div className="flex gap-4 mt-1">
+              <div className="flex gap-4 mt-1 flex-wrap">
                 <span>P(yes): {(c.implied_probability * 100).toFixed(0)}%</span>
                 <span>Confidence: {(c.link_confidence * 100).toFixed(0)}%</span>
                 <span>Wording: {(c.wording_match_score * 100).toFixed(0)}%</span>
-                {c.is_stale && <span className="text-amber-400">STALE</span>}
+                <span className="text-slate-500">type: {c.link_type.replace(/_/g, ' ')} ({c.link_type_multiplier}x)</span>
+                {c.freshness_factor < 1 && !c.is_excluded && (
+                  <span className="text-amber-400">freshness: {c.freshness_factor}x</span>
+                )}
+                {c.is_excluded && <span className="text-red-500">EXCLUDED</span>}
+                {c.is_stale && !c.is_excluded && <span className="text-amber-400">STALE</span>}
                 {c.is_thin && <span className="text-amber-400">THIN MARKET</span>}
                 {c.wording_mismatch && <span className="text-red-400">WORDING MISMATCH</span>}
               </div>
@@ -109,7 +119,7 @@ export default function PredictionMarketTab({ thesis }) {
           <p className="text-xs text-slate-500 mb-2">
             These are bounded informational outputs. They do not directly modify scoring dimensions or gates.
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div className="bg-slate-800/50 rounded p-2">
               <p className="text-xs text-slate-500">Divergence Modifier</p>
               <p className="text-sm text-slate-300">
@@ -126,10 +136,57 @@ export default function PredictionMarketTab({ thesis }) {
                   : 'N/A'}
               </p>
             </div>
+            <div className="bg-slate-800/50 rounded p-2">
+              <p className="text-xs text-slate-500">Qualifying Contracts</p>
+              <p className="text-sm text-slate-300">
+                {assessment.scoring_helpers.qualifying_contract_count ?? 0}
+              </p>
+            </div>
           </div>
           <p className="text-xs text-slate-400 mt-3">{assessment.scoring_helpers.prediction_market_commentary}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---- Assessment Staleness Notice ----
+function AssessmentStalenessNotice({ assessment }) {
+  // Find the freshest snapshot observation time across contracts
+  const contractTimes = (assessment.contracts || [])
+    .filter(c => c.observed_at)
+    .map(c => new Date(c.observed_at).getTime());
+  const freshestSnapshot = contractTimes.length > 0 ? Math.max(...contractTimes) : null;
+
+  // The assessment's own computed time (approximated by looking at the id/notes for now)
+  // Since assessment object comes from computeAndStoreAssessment, assessed_at is stored in DB
+  // but the live object may not have it — use the contracts to detect if data has moved on
+  const allExcluded = (assessment.contracts || []).every(c => c.is_excluded);
+  const anyExcluded = (assessment.contracts || []).some(c => c.is_excluded);
+
+  const warnings = [];
+
+  if (allExcluded && (assessment.contracts || []).length > 0) {
+    warnings.push('All linked contracts have data older than 48h. This assessment has no current market evidence.');
+  } else if (anyExcluded) {
+    const count = assessment.contracts.filter(c => c.is_excluded).length;
+    warnings.push(`${count} contract(s) excluded due to data older than 48h.`);
+  }
+
+  if (assessment.insufficient_evidence) {
+    warnings.push(`Insufficient qualifying contracts (${assessment.qualifying_contract_count || 0} found, need 2+). No numeric probability produced.`);
+  }
+
+  if (warnings.length === 0) return null;
+
+  return (
+    <div className="space-y-1">
+      {warnings.map((text, i) => (
+        <div key={i} className="flex gap-2 items-start text-xs text-red-400 bg-red-400/5 rounded px-2 py-1.5 border border-red-400/10">
+          <span className="font-bold shrink-0">EVIDENCE QUALITY:</span>
+          <span>{text}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -218,25 +275,33 @@ function ConsensusComparisonBlock({ thesis, assessment, helpers }) {
 function Warnings({ assessment }) {
   const warnings = [];
   if (assessment.wording_warning) {
-    warnings.push({ type: 'wording', text: 'Contract wording does not closely match thesis. Comparison may be unreliable.' });
+    warnings.push({ type: 'wording', text: 'Contract wording does not closely match thesis. Comparison may be unreliable.', color: 'amber' });
   }
   if (assessment.liquidity_warning) {
-    warnings.push({ type: 'liquidity', text: 'Thin market detected. Prediction market signal is weak.' });
+    warnings.push({ type: 'liquidity', text: 'Thin market detected. Prediction market signal is weak.', color: 'amber' });
   }
   if (assessment.thin_market_penalty > 0.3) {
-    warnings.push({ type: 'penalty', text: `Thin market penalty: ${(assessment.thin_market_penalty * 100).toFixed(0)}%. Confidence heavily reduced.` });
+    warnings.push({ type: 'penalty', text: `Thin market penalty: ${(assessment.thin_market_penalty * 100).toFixed(0)}%. Confidence heavily reduced.`, color: 'amber' });
+  }
+  if (assessment.proxy_dominance_warning) {
+    warnings.push({ type: 'proxy', text: 'Assessment driven primarily by proxy markets. Direct comparison unavailable. Do not treat as definitive.', color: 'red' });
   }
 
   if (warnings.length === 0) return null;
 
   return (
     <div className="space-y-1">
-      {warnings.map((w, i) => (
-        <div key={i} className="flex gap-2 items-start text-xs text-amber-400 bg-amber-400/5 rounded px-2 py-1 border border-amber-400/10">
-          <span className="font-bold shrink-0">WARNING:</span>
-          <span>{w.text}</span>
-        </div>
-      ))}
+      {warnings.map((w, i) => {
+        const colorClasses = w.color === 'red'
+          ? 'text-red-400 bg-red-400/5 border-red-400/10'
+          : 'text-amber-400 bg-amber-400/5 border-amber-400/10';
+        return (
+          <div key={i} className={`flex gap-2 items-start text-xs rounded px-2 py-1 border ${colorClasses}`}>
+            <span className="font-bold shrink-0">WARNING:</span>
+            <span>{w.text}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -245,9 +310,10 @@ function Warnings({ assessment }) {
 function LinkedContractCard({ link, expanded, onToggle }) {
   const snapshot = link.latest_snapshot;
   const isStale = snapshot ? new Date(snapshot.observed_at) < new Date(Date.now() - 6 * 3600 * 1000) : true;
+  const isExcluded = snapshot ? new Date(snapshot.observed_at) < new Date(Date.now() - 48 * 3600 * 1000) : true;
 
   return (
-    <div className="bg-slate-800/50 rounded border border-slate-700/30 overflow-hidden">
+    <div className={`bg-slate-800/50 rounded border border-slate-700/30 overflow-hidden ${isExcluded ? 'opacity-50' : ''}`}>
       <div className="p-3 cursor-pointer hover:bg-slate-800/80" onClick={onToggle}>
         <div className="flex justify-between items-start">
           <div className="flex-1 min-w-0">
@@ -261,9 +327,12 @@ function LinkedContractCard({ link, expanded, onToggle }) {
           <div className="text-right shrink-0 ml-3">
             {snapshot ? (
               <>
-                <p className="text-lg font-bold text-purple-400">{(snapshot.implied_probability * 100).toFixed(0)}%</p>
+                <p className={`text-lg font-bold ${isExcluded ? 'text-slate-500 line-through' : 'text-purple-400'}`}>
+                  {(snapshot.implied_probability * 100).toFixed(0)}%
+                </p>
                 <div className="flex gap-1 items-center">
-                  {isStale && <span className="text-xs text-amber-400">STALE</span>}
+                  {isExcluded && <span className="text-xs text-red-500">EXCLUDED</span>}
+                  {isStale && !isExcluded && <span className="text-xs text-amber-400">STALE</span>}
                   {link.wording_mismatch_flag === 1 && <span className="text-xs text-red-400">MISMATCH</span>}
                 </div>
               </>
@@ -277,6 +346,7 @@ function LinkedContractCard({ link, expanded, onToggle }) {
       {expanded && (
         <div className="border-t border-slate-700/30 p-3 bg-slate-900/50">
           <div className="grid grid-cols-2 gap-2 text-xs">
+            <Detail label="Link Type" value={link.link_type.replace(/_/g, ' ')} />
             <Detail label="Link Confidence" value={`${(link.link_confidence * 100).toFixed(0)}%`} />
             <Detail label="Wording Match" value={`${(link.wording_match_score * 100).toFixed(0)}%`}
               warn={link.wording_match_score < 0.3} />
@@ -291,6 +361,11 @@ function LinkedContractCard({ link, expanded, onToggle }) {
               </>
             )}
           </div>
+          {isExcluded && (
+            <div className="mt-2 text-xs text-red-400 bg-red-400/5 rounded px-2 py-1 border border-red-400/10">
+              Data older than 48h — excluded from aggregation entirely.
+            </div>
+          )}
           {link.rationale && (
             <div className="mt-2 text-xs text-slate-500">
               <span className="text-slate-600">Rationale:</span> {link.rationale}

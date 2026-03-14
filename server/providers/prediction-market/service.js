@@ -145,7 +145,7 @@ export function createLink(data) {
      wording_match_score, wording_mismatch_flag, rationale, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, data.thesis_id, data.prediction_market_event_id,
-    data.link_confidence ?? 0.5, data.link_type || 'partial_match',
+    data.link_confidence ?? 0.3, data.link_type || 'partial_match',
     data.wording_match_score ?? 0.5, data.wording_mismatch_flag ? 1 : 0,
     data.rationale || null, now, now
   );

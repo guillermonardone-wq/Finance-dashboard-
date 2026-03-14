@@ -10,8 +10,10 @@ export const EVENT_STATUSES = ['open', 'closed', 'resolved', 'cancelled'];
 
 export const MARKET_TYPES = ['binary', 'multiple_choice', 'scalar'];
 
-// Staleness threshold: snapshots older than this are considered stale
-export const STALE_THRESHOLD_HOURS = 6;
+// Staleness thresholds (graduated)
+export const STALE_THRESHOLD_HOURS = 6;       // soft stale: reduced weight
+export const VERY_STALE_THRESHOLD_HOURS = 24; // heavily reduced weight
+export const EXCLUDED_THRESHOLD_HOURS = 48;   // hard cutoff: excluded entirely
 
 // Thin market thresholds
 export const THIN_MARKET_LIQUIDITY = 10000;   // USD
@@ -27,3 +29,18 @@ export const WORDING_MATCH_FLOOR = 0.3;
 
 // Maximum scoring influence (bounded modifier for market_confirmation_divergence)
 export const MAX_SCORING_MODIFIER = 2.0;
+
+// Link type weight multipliers — mechanical enforcement of type separation
+export const LINK_TYPE_WEIGHTS = {
+  direct_match: 1.0,
+  partial_match: 0.7,
+  proxy: 0.4,
+  adjacent_signal: 0.0,  // display only, never enters aggregation
+};
+
+// Minimum scorable contracts: need at least this many with weight > MIN_CONTRACT_WEIGHT
+export const MIN_SCORABLE_CONTRACTS = 2;
+export const MIN_CONTRACT_WEIGHT = 0.1;
+
+// PM scoring confidence floor for score suggestion
+export const PM_CONFIDENCE_FLOOR = 0.4;
