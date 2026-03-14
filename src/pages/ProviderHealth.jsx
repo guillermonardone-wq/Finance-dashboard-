@@ -72,6 +72,7 @@ export default function ProviderHealth() {
           <p>FINNHUB_API_KEY — price, calendar, news, sentiment</p>
           <p>NEWSAPI_API_KEY — news headlines</p>
           <p>UNUSUAL_WHALES_API_KEY — options flow, dark pool, congressional trades, news</p>
+          <p>FRED_API_KEY — macro series (GDP, CPI, unemployment), yield curves, economic calendar</p>
         </div>
       </div>
     </div>

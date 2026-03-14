@@ -116,6 +116,61 @@ router.post('/watchlist', async (req, res) => {
   }
 });
 
+// --- FRED specific endpoints ---
+
+// GET yield curve snapshot
+router.get('/fred/yield-curve', async (req, res) => {
+  try {
+    const provider = registry.getProvider('fred');
+    if (!provider?.enabled) {
+      return res.json({ success: false, error: 'FRED provider not configured. Add FRED_API_KEY to .env', data: [] });
+    }
+    const data = await provider.getYieldCurve();
+    res.json({ success: true, data, provider: 'fred', source_attribution: 'FRED (Federal Reserve) — Yield Curve' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET available FRED series
+router.get('/fred/series', (req, res) => {
+  const provider = registry.getProvider('fred');
+  if (!provider) {
+    return res.json({ success: false, error: 'FRED provider not registered', data: [] });
+  }
+  res.json({ success: true, data: provider.getAvailableSeries() });
+});
+
+// GET a specific FRED series by friendly ID or raw FRED code
+router.get('/fred/series/:seriesId', async (req, res) => {
+  try {
+    const provider = registry.getProvider('fred');
+    if (!provider?.enabled) {
+      return res.json({ success: false, error: 'FRED provider not configured. Add FRED_API_KEY to .env', data: [] });
+    }
+    const { from, to } = req.query;
+    const data = await provider.getMacroSeries(req.params.seriesId, from, to);
+    res.json({ success: true, data, provider: 'fred', source_attribution: `FRED — ${req.params.seriesId}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET FRED release calendar
+router.get('/fred/calendar', async (req, res) => {
+  try {
+    const provider = registry.getProvider('fred');
+    if (!provider?.enabled) {
+      return res.json({ success: false, error: 'FRED provider not configured. Add FRED_API_KEY to .env', data: [] });
+    }
+    const { from, to } = req.query;
+    const data = await provider.getMacroCalendar(from, to);
+    res.json({ success: true, data, provider: 'fred', source_attribution: 'FRED — Release Calendar' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Unusual Whales specific endpoints ---
 
 // GET options flow (all)

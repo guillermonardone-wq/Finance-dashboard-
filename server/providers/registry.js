@@ -8,6 +8,7 @@ import { AlphaVantageProvider } from './adapters/alpha-vantage.js';
 import { FinnhubProvider } from './adapters/finnhub.js';
 import { NewsApiProvider } from './adapters/newsapi.js';
 import { UnusualWhalesProvider } from './adapters/unusual-whales.js';
+import { FredProvider } from './adapters/fred.js';
 
 class ProviderRegistry {
   constructor() {
@@ -22,6 +23,7 @@ class ProviderRegistry {
       new FinnhubProvider(),
       new NewsApiProvider(),
       new UnusualWhalesProvider(),
+      new FredProvider(),
     ];
 
     for (const adapter of adapters) {

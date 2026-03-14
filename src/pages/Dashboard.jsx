@@ -10,6 +10,7 @@ const PROVIDER_HINTS = {
   finnhub: 'Add FINNHUB_API_KEY to .env to enable prices and calendar.',
   newsapi: 'Add NEWSAPI_API_KEY to .env to enable news headlines.',
   unusual_whales: 'Add UNUSUAL_WHALES_API_KEY to .env for options flow and dark pool.',
+  fred: 'Add FRED_API_KEY to .env for macro series, yield curves, and economic calendar.',
 };
 
 export default function Dashboard() {

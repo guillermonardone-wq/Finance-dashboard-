@@ -61,6 +61,12 @@ export const api = {
   getLatestPMAssessment: (thesisId) => request(`/prediction-markets/assessments/thesis/${thesisId}/latest`),
   computePMAssessment: (thesisId) => request(`/prediction-markets/assessments/thesis/${thesisId}/compute`, { method: 'POST' }),
 
+  // FRED (Federal Reserve Economic Data)
+  getFredSeries: () => request('/market/fred/series'),
+  getFredSeriesData: (seriesId, params) => request(`/market/fred/series/${seriesId}?${new URLSearchParams(params || {})}`),
+  getFredYieldCurve: () => request('/market/fred/yield-curve'),
+  getFredCalendar: (params) => request(`/market/fred/calendar?${new URLSearchParams(params || {})}`),
+
   // Unusual Whales
   getOptionsFlow: (ticker) => request(`/market/options-flow${ticker ? '/' + ticker : ''}`),
   getDarkPool: (ticker) => request(`/market/darkpool${ticker ? '/' + ticker : ''}`),
