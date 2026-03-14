@@ -3,12 +3,22 @@ import { api } from '../lib/api';
 
 export const useMarketStore = create((set) => ({
   providers: {},
+  providerSummary: {},
   prices: {},
   news: [],
   headlines: [],
   macroData: {},
   calendar: [],
   observations: [],
+  fredSeries: [],
+  fredData: {},
+  fredYieldCurve: null,
+  worldBankIndicators: [],
+  worldBankCountries: [],
+  worldBankData: {},
+  worldBankSearch: null,
+  fxRates: null,
+  fxPairs: {},
   loading: false,
   error: null,
 
@@ -19,6 +29,13 @@ export const useMarketStore = create((set) => ({
     } catch (err) {
       set({ error: err.message });
     }
+  },
+
+  fetchProviderSummary: async () => {
+    try {
+      const providerSummary = await api.getProviderSummary();
+      set({ providerSummary });
+    } catch {}
   },
 
   fetchPrice: async (symbol) => {
@@ -73,6 +90,94 @@ export const useMarketStore = create((set) => ({
     try {
       const observations = await api.getObservations(params);
       set({ observations });
+    } catch (err) {
+      set({ error: err.message });
+    }
+  },
+
+  // ---- FRED ----
+  fetchFredSeries: async () => {
+    try {
+      const result = await api.getFredSeries();
+      if (result.success) set({ fredSeries: result.data || [] });
+    } catch {}
+  },
+
+  fetchFredData: async (seriesId) => {
+    try {
+      const result = await api.getFredSeriesData(seriesId);
+      if (result.success) {
+        set((state) => ({ fredData: { ...state.fredData, [seriesId]: result.data } }));
+      }
+      return result;
+    } catch (err) {
+      set({ error: err.message });
+    }
+  },
+
+  fetchFredYieldCurve: async () => {
+    try {
+      const result = await api.getFredYieldCurve();
+      if (result.success) set({ fredYieldCurve: result.data });
+      return result;
+    } catch {}
+  },
+
+  // ---- WORLD BANK ----
+  fetchWorldBankIndicators: async () => {
+    try {
+      const result = await api.getWorldBankIndicators();
+      if (result.success) {
+        set({
+          worldBankIndicators: result.data || [],
+          worldBankCountries: result.countries || [],
+        });
+      }
+    } catch {}
+  },
+
+  fetchWorldBankData: async (indicator, countries, from, to) => {
+    try {
+      const params = {};
+      if (countries) params.countries = countries;
+      if (from) params.from = from;
+      if (to) params.to = to;
+      const result = await api.getWorldBankData(indicator, params);
+      if (result.success) {
+        set((state) => ({ worldBankData: { ...state.worldBankData, [indicator]: result.data } }));
+      }
+      return result;
+    } catch (err) {
+      set({ error: err.message });
+    }
+  },
+
+  searchWorldBank: async (query) => {
+    try {
+      const result = await api.searchWorldBank(query, { top: 20 });
+      if (result.success) set({ worldBankSearch: result.data });
+      return result;
+    } catch (err) {
+      set({ error: err.message });
+    }
+  },
+
+  // ---- FX ----
+  fetchFxRates: async (base) => {
+    try {
+      const result = await api.getFxRates(base);
+      if (result.success) set({ fxRates: result.data });
+      return result;
+    } catch (err) {
+      set({ error: err.message });
+    }
+  },
+
+  fetchFxPairs: async (pairs) => {
+    try {
+      const result = await api.getFxPairQuotes(pairs);
+      if (result.success) set({ fxPairs: result.data });
+      return result;
     } catch (err) {
       set({ error: err.message });
     }

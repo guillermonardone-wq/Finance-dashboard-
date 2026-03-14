@@ -29,6 +29,7 @@ export const api = {
 
   // Market data
   getProviders: () => request('/market/providers'),
+  getProviderSummary: () => request('/market/providers/summary'),
   getPrice: (symbol) => request(`/market/price/${symbol}`),
   getCandles: (symbol, params) => request(`/market/candles/${symbol}?${new URLSearchParams(params || {})}`),
   getMacroSeries: (seriesId) => request(`/market/macro/${seriesId}`),
@@ -38,6 +39,24 @@ export const api = {
   getSentiment: (symbol) => request(`/market/sentiment/${symbol}`),
   getObservations: (params) => request(`/market/observations?${new URLSearchParams(params || {})}`),
   fetchWatchlist: (symbols) => request('/market/watchlist', { method: 'POST', body: JSON.stringify({ symbols }) }),
+
+  // FRED
+  getFredSeries: () => request('/market/fred/series'),
+  getFredSeriesData: (seriesId, params) => request(`/market/fred/series/${seriesId}?${new URLSearchParams(params || {})}`),
+  getFredYieldCurve: () => request('/market/fred/yield-curve'),
+  getFredCalendar: (params) => request(`/market/fred/calendar?${new URLSearchParams(params || {})}`),
+
+  // World Bank Data360
+  getWorldBankIndicators: () => request('/market/worldbank/indicators'),
+  getWorldBankData: (indicator, params) => request(`/market/worldbank/data/${indicator}?${new URLSearchParams(params || {})}`),
+  searchWorldBank: (query, options) => request('/market/worldbank/search', {
+    method: 'POST', body: JSON.stringify({ query, ...options }),
+  }),
+
+  // FX
+  getFxRates: (base) => request(`/market/fx/rates?${new URLSearchParams({ base: base || 'USD' })}`),
+  getFxPairQuote: (pair) => request(`/market/fx/quote/${pair}`),
+  getFxPairQuotes: (pairs) => request('/market/fx/quotes', { method: 'POST', body: JSON.stringify({ pairs }) }),
 
   // Reviews
   getReviews: (params) => request(`/reviews?${new URLSearchParams(params || {})}`),
@@ -60,17 +79,6 @@ export const api = {
   getPMAssessments: (thesisId) => request(`/prediction-markets/assessments/thesis/${thesisId}`),
   getLatestPMAssessment: (thesisId) => request(`/prediction-markets/assessments/thesis/${thesisId}/latest`),
   computePMAssessment: (thesisId) => request(`/prediction-markets/assessments/thesis/${thesisId}/compute`, { method: 'POST' }),
-
-  // FRED (Federal Reserve Economic Data)
-  getFredSeries: () => request('/market/fred/series'),
-  getFredSeriesData: (seriesId, params) => request(`/market/fred/series/${seriesId}?${new URLSearchParams(params || {})}`),
-  getFredYieldCurve: () => request('/market/fred/yield-curve'),
-  getFredCalendar: (params) => request(`/market/fred/calendar?${new URLSearchParams(params || {})}`),
-
-  // Unusual Whales
-  getOptionsFlow: (ticker) => request(`/market/options-flow${ticker ? '/' + ticker : ''}`),
-  getDarkPool: (ticker) => request(`/market/darkpool${ticker ? '/' + ticker : ''}`),
-  getCongressTrades: () => request('/market/congress'),
 
   // Health
   getHealth: () => request('/health'),

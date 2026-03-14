@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS signals (
     'sanctions_risk', 'shipping_disruption', 'energy_bottleneck',
     'policy_shock', 'currency_instability', 'market_complacency',
     'central_bank_action', 'election_political', 'supply_chain',
-    'technology_disruption', 'credit_stress', 'other'
+    'technology_disruption', 'credit_stress', 'conflict_kinetic',
+    'diplomatic_shift', 'regime_change', 'trade_war', 'other'
   )),
   subcategory TEXT,
 

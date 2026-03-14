@@ -6,11 +6,11 @@ import { useMarketStore } from '../store/useMarketStore';
 import { ClassificationBadge, CompositeScoreBar } from '../components/common/ScoreDisplay';
 
 const PROVIDER_HINTS = {
-  alpha_vantage: 'Add ALPHA_VANTAGE_API_KEY to .env to enable market data.',
-  finnhub: 'Add FINNHUB_API_KEY to .env to enable prices and calendar.',
-  newsapi: 'Add NEWSAPI_API_KEY to .env to enable news headlines.',
-  unusual_whales: 'Add UNUSUAL_WHALES_API_KEY to .env for options flow and dark pool.',
-  fred: 'Add FRED_API_KEY to .env for macro series, yield curves, and economic calendar.',
+  fred: 'Add FRED_API_KEY to .env — US macro (CPI, GDP, rates, yield curves)',
+  finnhub: 'Add FINNHUB_API_KEY to .env — stocks, ETFs, FX pairs, news',
+  worldbank: 'No key needed — global macro data (auto-enabled)',
+  alpha_vantage: 'Add ALPHA_VANTAGE_API_KEY to .env — fallback prices',
+  newsapi: 'Add NEWSAPI_API_KEY to .env — news headlines',
 };
 
 export default function Dashboard() {

@@ -5,7 +5,7 @@ const NAV_ITEMS = [
   { to: '/bot',        label: 'Bot Intel Feed',    icon: '⚙' },
   { to: '/signals',    label: 'Signal Inbox',      icon: '⚡' },
   { to: '/theses',     label: 'Theses',            icon: '◈' },
-  { to: '/thesis/new', label: 'New Thesis',         icon: '+' },
+  { to: '/thesis/new', label: 'Quick Capture',        icon: '+' },
   { to: '/market',     label: 'Market Data',        icon: '◆' },
   { to: '/reviews',    label: 'Reviews',            icon: '◇' },
   { to: '/quarantine', label: 'Quarantine',         icon: '⊘' },

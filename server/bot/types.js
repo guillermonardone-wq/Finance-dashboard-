@@ -7,6 +7,8 @@
 // are MANDATORY on all output objects — not optional decorations.
 // ============================================================
 
+import { v4 as uuidv4 } from 'uuid';
+
 /**
  * BOT STATES — The only states the bot layer can assign.
  * Action states (PAPER_TRADE, SMALL_POSITION, FULLY_QUALIFIED) are
@@ -76,7 +78,7 @@ export function validateCandidateSignal(obj) {
     valid: errors.length === 0,
     errors,
     normalized: {
-      id: obj.id || crypto.randomUUID(),
+      id: obj.id || uuidv4(),
       title: obj.title || '',
       summary: obj.summary || '',
       detected_at: obj.detected_at || new Date().toISOString(),
@@ -103,7 +105,7 @@ export function validateSignalCluster(obj) {
     valid: errors.length === 0,
     errors,
     normalized: {
-      id: obj.id || crypto.randomUUID(),
+      id: obj.id || uuidv4(),
       title: obj.title || '',
       summary: obj.summary || '',
       member_signal_ids: obj.member_signal_ids || [],
@@ -127,7 +129,7 @@ export function validatePatternMatch(obj) {
   return {
     valid: !!(obj.cluster_id && obj.pattern_name),
     normalized: {
-      id: obj.id || crypto.randomUUID(),
+      id: obj.id || uuidv4(),
       cluster_id: obj.cluster_id || '',
       playbook_pattern_id: obj.playbook_pattern_id || null,
       pattern_name: obj.pattern_name || 'Unknown pattern',
@@ -146,7 +148,7 @@ export function validateMispricingAssessment(obj) {
   return {
     valid: !!(obj.cluster_id),
     normalized: {
-      id: obj.id || crypto.randomUUID(),
+      id: obj.id || uuidv4(),
       cluster_id: obj.cluster_id || '',
       assessed_at: obj.assessed_at || new Date().toISOString(),
       market_reaction_state: MARKET_REACTION_STATES.includes(obj.market_reaction_state)
@@ -172,7 +174,7 @@ export function validateCounterCase(obj) {
     valid: errors.length === 0,
     errors,
     normalized: {
-      id: obj.id || crypto.randomUUID(),
+      id: obj.id || uuidv4(),
       cluster_id: obj.cluster_id || '',
       generated_at: obj.generated_at || new Date().toISOString(),
       strongest_opposing_case: obj.strongest_opposing_case || '',
@@ -199,7 +201,7 @@ export function validateBotRecommendation(obj) {
     valid: errors.length === 0,
     errors,
     normalized: {
-      id: obj.id || crypto.randomUUID(),
+      id: obj.id || uuidv4(),
       cluster_id: obj.cluster_id || '',
       generated_at: obj.generated_at || new Date().toISOString(),
       recommended_state: BOT_STATES.includes(obj.recommended_state) ? obj.recommended_state : 'LOG_ONLY',

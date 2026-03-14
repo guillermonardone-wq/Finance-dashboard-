@@ -167,4 +167,87 @@ export class FinnhubProvider extends BaseProvider {
       throw err;
     }
   }
+
+  // ---- FX RATES ----
+  // Finnhub supports forex quotes via the /forex/rates endpoint
+  async getFxRate(base = 'USD') {
+    this._trackRequest();
+    try {
+      const res = await fetch(`${BASE_URL}/forex/rates?base=${encodeURIComponent(base)}&token=${this.apiKey}`);
+      const data = await res.json();
+      if (!data.quote) throw new Error(`No FX data for base ${base}`);
+      return {
+        base: data.base || base,
+        quotes: data.quote,
+        timestamp: new Date().toISOString(),
+        source_provider: this.name,
+        source_attribution: 'Finnhub - Forex Rates',
+      };
+    } catch (err) {
+      this._setError(err);
+      throw err;
+    }
+  }
+
+  // Get a specific FX pair quote (e.g., "EUR/USD" via OANDA prefix)
+  async getFxPairQuote(pair) {
+    this._trackRequest();
+    try {
+      // Finnhub uses OANDA: prefix for forex symbols
+      const fhSymbol = `OANDA:${pair.replace('/', '_')}`;
+      const res = await fetch(`${BASE_URL}/quote?symbol=${encodeURIComponent(fhSymbol)}&token=${this.apiKey}`);
+      const data = await res.json();
+      if (!data.c || data.c === 0) throw new Error(`No quote for FX pair ${pair}`);
+      return {
+        symbol: pair,
+        price: data.c,
+        change: data.d || 0,
+        changePercent: data.dp || 0,
+        high: data.h || data.c,
+        low: data.l || data.c,
+        previousClose: data.pc || 0,
+        timestamp: data.t ? new Date(data.t * 1000).toISOString() : new Date().toISOString(),
+        source_provider: this.name,
+        source_attribution: 'Finnhub - Forex Quote',
+      };
+    } catch (err) {
+      this._setError(err);
+      throw err;
+    }
+  }
+
+  // Get FX candles for a pair
+  async getFxCandles(pair, interval = '1d', from, to) {
+    this._trackRequest();
+    const resolutionMap = { '1m': '1', '5m': '5', '15m': '15', '30m': '30', '1h': '60', '1d': 'D', '1w': 'W', '1M': 'M' };
+    const resolution = resolutionMap[interval] || 'D';
+    const now = Math.floor(Date.now() / 1000);
+    const fromTs = from ? Math.floor(new Date(from).getTime() / 1000) : now - 90 * 86400;
+    const toTs = to ? Math.floor(new Date(to).getTime() / 1000) : now;
+    const fhSymbol = `OANDA:${pair.replace('/', '_')}`;
+
+    try {
+      const res = await fetch(
+        `${BASE_URL}/forex/candle?symbol=${encodeURIComponent(fhSymbol)}&resolution=${resolution}&from=${fromTs}&to=${toTs}&token=${this.apiKey}`
+      );
+      const data = await res.json();
+      if (data.s === 'no_data' || !data.c) throw new Error(`No FX candle data for ${pair}`);
+
+      return data.c.map((_, i) => ({
+        symbol: pair,
+        open: data.o[i],
+        high: data.h[i],
+        low: data.l[i],
+        close: data.c[i],
+        volume: data.v?.[i] || 0,
+        timestamp: new Date(data.t[i] * 1000).toISOString(),
+        interval,
+        source_provider: this.name,
+        source_attribution: 'Finnhub - Forex Candles',
+      }));
+    } catch (err) {
+      this._setError(err);
+      throw err;
+    }
+  }
 }

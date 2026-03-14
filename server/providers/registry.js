@@ -3,12 +3,19 @@
 // ============================================================
 // Handles: initialization, capability routing, fallback, health.
 // If a primary provider fails, tries the next capable provider.
+//
+// Providers:
+// - FRED: US macro (CPI, GDP, unemployment, rates, yield curves)
+// - World Bank Data360: Global macro (GDP, inflation, trade by country)
+// - Finnhub: Market data (stocks, ETFs, FX, news, calendar)
+// - Alpha Vantage: Fallback market data (prices, macro)
+// - NewsAPI: News headlines
 
 import { AlphaVantageProvider } from './adapters/alpha-vantage.js';
 import { FinnhubProvider } from './adapters/finnhub.js';
 import { NewsApiProvider } from './adapters/newsapi.js';
-import { UnusualWhalesProvider } from './adapters/unusual-whales.js';
 import { FredProvider } from './adapters/fred.js';
+import { WorldBankProvider } from './adapters/worldbank.js';
 
 class ProviderRegistry {
   constructor() {
@@ -17,20 +24,26 @@ class ProviderRegistry {
   }
 
   async initialize() {
-    // Register all providers
+    // Register all providers — order matters for fallback priority
     const adapters = [
-      new AlphaVantageProvider(),
       new FinnhubProvider(),
+      new AlphaVantageProvider(),
       new NewsApiProvider(),
-      new UnusualWhalesProvider(),
       new FredProvider(),
+      new WorldBankProvider(),
     ];
 
     for (const adapter of adapters) {
-      await adapter.initialize();
+      try {
+        await adapter.initialize();
+      } catch (err) {
+        adapter.enabled = false;
+        adapter._setError(err);
+      }
       this.providers.set(adapter.name, adapter);
+      const keyInfo = adapter.name === 'worldbank' ? '(no key needed)' : '';
       console.log(
-        `[Registry] ${adapter.name}: ${adapter.enabled ? 'ENABLED' : 'DISABLED'}` +
+        `[Registry] ${adapter.name}: ${adapter.enabled ? 'ENABLED' : 'DISABLED'} ${keyInfo}` +
         (adapter._lastError ? ` (${adapter._lastError.message})` : '')
       );
     }
@@ -44,7 +57,6 @@ class ProviderRegistry {
     return [...this.providers.values()]
       .filter(p => p.enabled && p.capabilities[capability])
       .sort((a, b) => {
-        // Prefer providers with fewer errors
         const aErr = a._lastError ? 1 : 0;
         const bErr = b._lastError ? 1 : 0;
         return aErr - bErr;
@@ -86,12 +98,11 @@ class ProviderRegistry {
             fallback: false,
           };
         }
-        // Continue to fallback
       }
     }
   }
 
-  // Get prices with fallback
+  // Convenience methods
   async getPrice(symbol) {
     return this.execute('prices', 'getPrice', symbol);
   }
@@ -120,6 +131,7 @@ class ProviderRegistry {
     return this.execute('sentiment', 'getSentiment', symbol);
   }
 
+  // Get the summary status of all providers
   getStatus() {
     const status = {};
     for (const [name, provider] of this.providers) {
@@ -128,8 +140,34 @@ class ProviderRegistry {
     return status;
   }
 
+  // Get a specific provider by name
   getProvider(name) {
     return this.providers.get(name);
+  }
+
+  // Check if any live provider is configured
+  hasAnyLiveProvider() {
+    return [...this.providers.values()].some(p => p.enabled);
+  }
+
+  // Get a summary of what's configured vs missing
+  getConfigSummary() {
+    const summary = {};
+    for (const [name, provider] of this.providers) {
+      summary[name] = {
+        enabled: provider.enabled,
+        capabilities: provider.capabilities,
+        needsKey: name !== 'worldbank',
+        envVar: {
+          finnhub: 'FINNHUB_API_KEY',
+          alpha_vantage: 'ALPHA_VANTAGE_API_KEY',
+          newsapi: 'NEWSAPI_API_KEY',
+          fred: 'FRED_API_KEY',
+          worldbank: null,
+        }[name] || null,
+      };
+    }
+    return summary;
   }
 }
 

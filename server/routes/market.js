@@ -10,6 +10,11 @@ router.get('/providers', (req, res) => {
   res.json(registry.getStatus());
 });
 
+// GET provider config summary (what's configured vs missing)
+router.get('/providers/summary', (req, res) => {
+  res.json(registry.getConfigSummary());
+});
+
 // GET price for a symbol
 router.get('/price/:symbol', async (req, res) => {
   try {
@@ -116,7 +121,9 @@ router.post('/watchlist', async (req, res) => {
   }
 });
 
-// --- FRED specific endpoints ---
+// ============================================================
+// FRED specific endpoints
+// ============================================================
 
 // GET yield curve snapshot
 router.get('/fred/yield-curve', async (req, res) => {
@@ -171,73 +178,112 @@ router.get('/fred/calendar', async (req, res) => {
   }
 });
 
-// --- Unusual Whales specific endpoints ---
+// ============================================================
+// WORLD BANK DATA360 endpoints
+// ============================================================
 
-// GET options flow (all)
-router.get('/options-flow', async (req, res) => {
+// POST search indicators
+router.post('/worldbank/search', async (req, res) => {
   try {
-    const provider = registry.getProvider('unusual_whales');
+    const provider = registry.getProvider('worldbank');
     if (!provider?.enabled) {
-      return res.json({ success: false, error: 'Unusual Whales provider not configured', data: [] });
+      return res.json({ success: false, error: 'World Bank provider unavailable', data: [] });
     }
-    const data = await provider.getOptionsFlow(null);
-    res.json({ success: true, data, provider: 'unusual_whales', source_attribution: 'Unusual Whales - Options Flow' });
+    const { query, top, skip, filter } = req.body;
+    if (!query) return res.status(400).json({ error: 'query is required' });
+    const data = await provider.search(query, { top, skip, filter });
+    res.json({ success: true, data, provider: 'worldbank', source_attribution: 'World Bank Data360' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET options flow (by ticker)
-router.get('/options-flow/:ticker', async (req, res) => {
+// GET available World Bank indicators (curated list)
+router.get('/worldbank/indicators', (req, res) => {
+  const provider = registry.getProvider('worldbank');
+  if (!provider) {
+    return res.json({ success: false, error: 'World Bank provider not registered', data: [] });
+  }
+  res.json({
+    success: true,
+    data: provider.getAvailableIndicators(),
+    countries: provider.getDefaultCountries(),
+  });
+});
+
+// GET World Bank data for an indicator
+router.get('/worldbank/data/:indicator', async (req, res) => {
   try {
-    const provider = registry.getProvider('unusual_whales');
+    const provider = registry.getProvider('worldbank');
     if (!provider?.enabled) {
-      return res.json({ success: false, error: 'Unusual Whales provider not configured', data: [] });
+      return res.json({ success: false, error: 'World Bank provider unavailable', data: [] });
     }
-    const data = await provider.getOptionsFlow(req.params.ticker);
-    res.json({ success: true, data, provider: 'unusual_whales', source_attribution: 'Unusual Whales - Options Flow' });
+    const { countries, from, to, dataset } = req.query;
+    const countryList = countries ? countries.split(',') : [];
+    const data = await provider.getData(req.params.indicator, countryList, {
+      dataset,
+      timePeriodFrom: from,
+      timePeriodTo: to,
+    });
+    res.json({ success: true, data, provider: 'worldbank', source_attribution: `World Bank Data360 — ${req.params.indicator}` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET dark pool activity (all)
-router.get('/darkpool', async (req, res) => {
+// ============================================================
+// FX endpoints (via Finnhub)
+// ============================================================
+
+// GET FX rates against USD
+router.get('/fx/rates', async (req, res) => {
   try {
-    const provider = registry.getProvider('unusual_whales');
+    const provider = registry.getProvider('finnhub');
     if (!provider?.enabled) {
-      return res.json({ success: false, error: 'Unusual Whales provider not configured', data: [] });
+      return res.json({ success: false, error: 'Finnhub provider not configured. Add FINNHUB_API_KEY to .env', data: null });
     }
-    const data = await provider.getDarkPoolActivity(null);
-    res.json({ success: true, data, provider: 'unusual_whales', source_attribution: 'Unusual Whales - Dark Pool' });
+    const { base } = req.query;
+    const data = await provider.getFxRate(base || 'USD');
+    res.json({ success: true, data, provider: 'finnhub', source_attribution: 'Finnhub - Forex Rates' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET dark pool activity (by ticker)
-router.get('/darkpool/:ticker', async (req, res) => {
+// GET FX pair quote (e.g., EUR/USD)
+router.get('/fx/quote/:pair', async (req, res) => {
   try {
-    const provider = registry.getProvider('unusual_whales');
+    const provider = registry.getProvider('finnhub');
     if (!provider?.enabled) {
-      return res.json({ success: false, error: 'Unusual Whales provider not configured', data: [] });
+      return res.json({ success: false, error: 'Finnhub provider not configured', data: null });
     }
-    const data = await provider.getDarkPoolActivity(req.params.ticker);
-    res.json({ success: true, data, provider: 'unusual_whales', source_attribution: 'Unusual Whales - Dark Pool' });
+    const data = await provider.getFxPairQuote(req.params.pair);
+    res.json({ success: true, data, provider: 'finnhub', source_attribution: 'Finnhub - Forex Quote' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET congressional trades
-router.get('/congress', async (req, res) => {
+// POST bulk FX pair quotes
+router.post('/fx/quotes', async (req, res) => {
   try {
-    const provider = registry.getProvider('unusual_whales');
+    const provider = registry.getProvider('finnhub');
     if (!provider?.enabled) {
-      return res.json({ success: false, error: 'Unusual Whales provider not configured', data: [] });
+      return res.json({ success: false, error: 'Finnhub provider not configured', data: {} });
     }
-    const data = await provider.getCongressionalTrades();
-    res.json({ success: true, data, provider: 'unusual_whales', source_attribution: 'Unusual Whales - Congressional Trades' });
+    const { pairs } = req.body;
+    if (!Array.isArray(pairs)) return res.status(400).json({ error: 'pairs must be an array' });
+    const results = {};
+    await Promise.allSettled(
+      pairs.map(async (pair) => {
+        try {
+          results[pair] = await provider.getFxPairQuote(pair);
+        } catch (err) {
+          results[pair] = { error: err.message, symbol: pair };
+        }
+      })
+    );
+    res.json({ success: true, data: results, provider: 'finnhub' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
