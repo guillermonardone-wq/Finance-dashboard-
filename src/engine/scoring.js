@@ -43,7 +43,7 @@ export function computeCompositeScore(scores) {
     const rawScore = scores[dim];
     const weight = SCORE_WEIGHTS[dim];
 
-    if (rawScore == null || rawScore === undefined) {
+    if (rawScore == null) {
       missing.push(dim);
       breakdown.push({
         dimension: dim,
@@ -97,10 +97,15 @@ export function autoScoreThesis(thesis, signals = [], marketObs = []) {
   if (signals.length > 0) {
     const reliabilityScores = { verified: 9, likely: 7, unverified: 4, disputed: 2, false: 0 };
     const avgReliability = signals.reduce((sum, s) => sum + (reliabilityScores[s.reliability] || 3), 0) / signals.length;
-    const avgStrength = signals.filter(s => s.signal_strength).reduce((sum, s) => sum + s.signal_strength * 10, 0)
-      / Math.max(1, signals.filter(s => s.signal_strength).length);
-    auto.signal_quality = Math.round(((avgReliability + avgStrength) / 2) * 10) / 10;
-    explanations.signal_quality = `${signals.length} signals, avg reliability ${avgReliability.toFixed(1)}/10`;
+    const withStrength = signals.filter(s => s.signal_strength != null);
+    if (withStrength.length > 0) {
+      const avgStrength = withStrength.reduce((sum, s) => sum + s.signal_strength * 10, 0) / withStrength.length;
+      auto.signal_quality = Math.round(((avgReliability + avgStrength) / 2) * 10) / 10;
+      explanations.signal_quality = `${signals.length} signals, avg reliability ${avgReliability.toFixed(1)}/10, avg strength ${avgStrength.toFixed(1)}/10`;
+    } else {
+      auto.signal_quality = Math.round(avgReliability * 10) / 10;
+      explanations.signal_quality = `${signals.length} signals, avg reliability ${avgReliability.toFixed(1)}/10 (no strength data)`;
+    }
   }
 
   // --- Signal Independence ---

@@ -123,7 +123,7 @@ export const GATE_DEFINITIONS = [
     description: 'Evidence must come from more than one source type.',
     severity: 'soft',
     check: (thesis, _, signals) => {
-      const linked = (signals || []).filter(s => s.thesis_id === thesis.id);
+      const linked = (signals || []).filter(s => s.thesis_id === thesis.id && s.status === 'linked');
       const sources = new Set(linked.map(s => s.source_type));
       const passed = sources.size >= 2;
       return {
