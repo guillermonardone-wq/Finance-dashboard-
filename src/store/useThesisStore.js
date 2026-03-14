@@ -73,9 +73,29 @@ export const useThesisStore = create((set, get) => ({
   },
 
   // Run full decision engine on a thesis
-  evaluateThesis: (thesis, signals = [], marketObs = [], executionPlan = null, checklistAnswers = null) => {
+  // predictionMarketAssessment is optional — if provided, it adds a bounded
+  // suggestion for market_confirmation_divergence but does NOT override it.
+  evaluateThesis: (thesis, signals = [], marketObs = [], executionPlan = null, checklistAnswers = null, predictionMarketAssessment = null) => {
     // Step 1: Auto-score what we can
     const { scores: autoScores, explanations } = autoScoreThesis(thesis, signals, marketObs);
+
+    // Step 1b: Prediction market suggestion (bounded, informational)
+    // This provides a SUGGESTED score for market_confirmation_divergence
+    // based on prediction market consensus. It is capped and does not
+    // override manual scores or any other dimension.
+    let pmSuggestion = null;
+    let pmExplanation = null;
+    if (predictionMarketAssessment && predictionMarketAssessment.scoring_helpers) {
+      const helpers = predictionMarketAssessment.scoring_helpers;
+      if (helpers.prediction_market_divergence != null && helpers.prediction_market_confidence > 0.2) {
+        // Map divergence to a 0-10 score: higher divergence = higher score
+        // (divergence itself is interesting signal, whether thesis is ahead or behind)
+        // Bounded: confidence-weighted, capped at 8 to prevent dominance
+        const rawScore = Math.min(8, helpers.prediction_market_divergence * 4);
+        pmSuggestion = Math.round(rawScore * 10) / 10;
+        pmExplanation = `Prediction market suggestion: ${pmSuggestion}/10 (confidence: ${(helpers.prediction_market_confidence * 100).toFixed(0)}%). ${helpers.prediction_market_commentary}`;
+      }
+    }
 
     // Step 2: Merge auto-scores with any manual overrides from thesis
     const dimensionScores = {
@@ -90,8 +110,14 @@ export const useThesisStore = create((set, get) => ({
       disconfirmation_robustness: thesis.score_disconfirmation_robustness ?? autoScores.disconfirmation_robustness ?? null,
       emotional_neutrality: thesis.score_emotional_neutrality ?? null,
       data_freshness: autoScores.data_freshness ?? null,
-      market_confirmation_divergence: null, // always manual for MVP
+      // Manual score takes priority. PM suggestion is fallback only.
+      market_confirmation_divergence: thesis.score_market_confirmation_divergence ?? pmSuggestion,
     };
+
+    // Add PM explanation if used
+    if (pmExplanation && dimensionScores.market_confirmation_divergence === pmSuggestion) {
+      explanations.market_confirmation_divergence = pmExplanation;
+    }
 
     // Step 3: Compute composite
     const scoreResult = computeCompositeScore(dimensionScores);
@@ -109,6 +135,7 @@ export const useThesisStore = create((set, get) => ({
       scoreResult,
       gateResult,
       classification,
+      predictionMarketHelpers: predictionMarketAssessment?.scoring_helpers || null,
     };
   },
 }));

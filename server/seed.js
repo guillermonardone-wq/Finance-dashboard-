@@ -185,10 +185,123 @@ function seed() {
     );
   }
 
+  // === PREDICTION MARKET DATA ===
+
+  // Provider: Polymarket
+  const polymarketProviderId = uuidv4();
+  db.prepare(`INSERT INTO prediction_market_providers (id, name, provider_key, base_url, active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 1, ?, ?)`).run(
+    polymarketProviderId, 'Polymarket', 'polymarket', 'https://polymarket.com', now, now
+  );
+
+  // Events
+  const pmEvent1Id = uuidv4();
+  const pmEvent2Id = uuidv4();
+  const pmEvent3Id = uuidv4();
+
+  db.prepare(`INSERT INTO prediction_market_events
+    (id, provider_id, external_market_id, title, description, url, category, status, open_time, close_time, market_type, tags_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    pmEvent1Id, polymarketProviderId, 'pm-hormuz-closure-2026',
+    'Will Iran close the Strait of Hormuz by June 30, 2026?',
+    'This market resolves YES if the Strait of Hormuz is closed to commercial shipping for 24+ consecutive hours due to Iranian military action before June 30, 2026.',
+    'https://polymarket.com/event/hormuz-closure-2026',
+    'geopolitics', 'open', '2026-01-15T00:00:00Z', '2026-06-30T23:59:59Z',
+    'binary', JSON.stringify(['iran', 'hormuz', 'oil', 'geopolitics']), now, now
+  );
+
+  db.prepare(`INSERT INTO prediction_market_events
+    (id, provider_id, external_market_id, title, description, url, category, status, open_time, close_time, market_type, tags_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    pmEvent2Id, polymarketProviderId, 'pm-oil-above-100-q2',
+    'Will WTI Crude Oil trade above $100/barrel in Q2 2026?',
+    'This market resolves YES if WTI Crude Oil (front-month futures) trades at or above $100.00 per barrel at any point between April 1 and June 30, 2026.',
+    'https://polymarket.com/event/oil-100-q2-2026',
+    'energy', 'open', '2026-02-01T00:00:00Z', '2026-06-30T23:59:59Z',
+    'binary', JSON.stringify(['oil', 'energy', 'commodities']), now, now
+  );
+
+  db.prepare(`INSERT INTO prediction_market_events
+    (id, provider_id, external_market_id, title, description, url, category, status, open_time, close_time, market_type, tags_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    pmEvent3Id, polymarketProviderId, 'pm-boj-rate-hike-apr',
+    'Will the Bank of Japan raise rates at the April 2026 meeting?',
+    'This market resolves YES if the Bank of Japan announces an interest rate increase at or following its April 24-25, 2026 monetary policy meeting.',
+    'https://polymarket.com/event/boj-rate-hike-april-2026',
+    'macro', 'open', '2026-02-15T00:00:00Z', '2026-04-25T23:59:59Z',
+    'binary', JSON.stringify(['japan', 'boj', 'rates', 'macro']), now, now
+  );
+
+  // Snapshots (time series for each event)
+  const snapshotData = [
+    // Hormuz event: probability rising from 8% to 18%
+    { eventId: pmEvent1Id, daysAgo: 7, prob: 0.08, vol: 45000, liq: 120000, spread: 0.02 },
+    { eventId: pmEvent1Id, daysAgo: 5, prob: 0.10, vol: 62000, liq: 135000, spread: 0.02 },
+    { eventId: pmEvent1Id, daysAgo: 3, prob: 0.14, vol: 89000, liq: 142000, spread: 0.03 },
+    { eventId: pmEvent1Id, daysAgo: 1, prob: 0.16, vol: 125000, liq: 155000, spread: 0.02 },
+    { eventId: pmEvent1Id, daysAgo: 0, prob: 0.18, vol: 142000, liq: 160000, spread: 0.02 },
+    // Oil above $100: moderate probability
+    { eventId: pmEvent2Id, daysAgo: 5, prob: 0.22, vol: 210000, liq: 380000, spread: 0.01 },
+    { eventId: pmEvent2Id, daysAgo: 2, prob: 0.25, vol: 245000, liq: 395000, spread: 0.01 },
+    { eventId: pmEvent2Id, daysAgo: 0, prob: 0.28, vol: 280000, liq: 410000, spread: 0.01 },
+    // BoJ rate hike: relatively liquid, moderate probability
+    { eventId: pmEvent3Id, daysAgo: 5, prob: 0.30, vol: 180000, liq: 290000, spread: 0.02 },
+    { eventId: pmEvent3Id, daysAgo: 2, prob: 0.35, vol: 220000, liq: 310000, spread: 0.02 },
+    { eventId: pmEvent3Id, daysAgo: 0, prob: 0.38, vol: 260000, liq: 330000, spread: 0.01 },
+  ];
+
+  for (const s of snapshotData) {
+    const observedAt = new Date(Date.now() - s.daysAgo * 86400000).toISOString();
+    db.prepare(`INSERT INTO prediction_market_snapshots
+      (id, prediction_market_event_id, observed_at, yes_price, no_price, implied_probability,
+       volume_24h, liquidity, spread, source_attribution, is_stale, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      uuidv4(), s.eventId, observedAt,
+      s.prob, 1 - s.prob, s.prob,
+      s.vol, s.liq, s.spread,
+      'Polymarket - market snapshot', 0, now
+    );
+  }
+
+  // Links: thesis → prediction market events
+  db.prepare(`INSERT INTO thesis_prediction_links
+    (id, thesis_id, prediction_market_event_id, link_confidence, link_type,
+     wording_match_score, wording_mismatch_flag, rationale, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    uuidv4(), thesis1Id, pmEvent1Id, 0.65, 'partial_match',
+    0.55, 1,
+    'Contract asks about full closure for 24h. Thesis is about material disruption which is broader — includes insurance-driven rerouting and partial blockage. Wording mismatch: thesis covers scenarios the contract does not.',
+    now, now
+  );
+
+  db.prepare(`INSERT INTO thesis_prediction_links
+    (id, thesis_id, prediction_market_event_id, link_confidence, link_type,
+     wording_match_score, wording_mismatch_flag, rationale, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    uuidv4(), thesis1Id, pmEvent2Id, 0.70, 'proxy',
+    0.40, 1,
+    'Oil above $100 is a downstream consequence of thesis, not the thesis itself. Useful as a proxy for whether the market is pricing energy disruption risk, but not a direct validation.',
+    now, now
+  );
+
+  db.prepare(`INSERT INTO thesis_prediction_links
+    (id, thesis_id, prediction_market_event_id, link_confidence, link_type,
+     wording_match_score, wording_mismatch_flag, rationale, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    uuidv4(), thesis2Id, pmEvent3Id, 0.80, 'partial_match',
+    0.70, 0,
+    'Contract asks specifically about the April meeting. Thesis covers broader timeline but April is a key catalyst. Good partial match — result would be strongly confirmatory or disconfirmatory for the thesis.',
+    now, now
+  );
+
   console.log('Seed complete:');
   console.log(`  Theses: 2`);
   console.log(`  Signals: ${signalData.length}`);
   console.log(`  Market observations: ${obsData.length}`);
+  console.log(`  Prediction market providers: 1`);
+  console.log(`  Prediction market events: 3`);
+  console.log(`  Prediction market snapshots: ${snapshotData.length}`);
+  console.log(`  Thesis-prediction links: 3`);
 
   closeDb();
 }

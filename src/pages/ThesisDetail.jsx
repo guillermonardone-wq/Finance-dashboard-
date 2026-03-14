@@ -4,8 +4,9 @@ import { useThesisStore } from '../store/useThesisStore';
 import { useSignalStore } from '../store/useSignalStore';
 import { SCORE_WEIGHTS } from '../engine/scoring';
 import { ClassificationBadge, CompositeScoreBar, DimensionScoreCard, GateResultDisplay } from '../components/common/ScoreDisplay';
+import PredictionMarketTab from '../components/PredictionMarketTab';
 
-const TABS = ['Overview', 'Evidence', 'Scorecard', 'Checklist', 'Audit Log'];
+const TABS = ['Overview', 'Evidence', 'Prediction Markets', 'Scorecard', 'Checklist', 'Audit Log'];
 
 export default function ThesisDetail() {
   const { id } = useParams();
@@ -213,6 +214,10 @@ export default function ThesisDetail() {
             ))
           )}
         </div>
+      )}
+
+      {tab === 'Prediction Markets' && (
+        <PredictionMarketTab thesis={thesis} />
       )}
 
       {tab === 'Scorecard' && evaluation && (

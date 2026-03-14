@@ -44,6 +44,23 @@ export const api = {
   getReview: (id) => request(`/reviews/${id}`),
   createReview: (data) => request('/reviews', { method: 'POST', body: JSON.stringify(data) }),
 
+  // Prediction Markets
+  getPMProviders: () => request('/prediction-markets/providers'),
+  createPMProvider: (data) => request('/prediction-markets/providers', { method: 'POST', body: JSON.stringify(data) }),
+  getPMEvents: (params) => request(`/prediction-markets/events?${new URLSearchParams(params || {})}`),
+  getPMEvent: (id) => request(`/prediction-markets/events/${id}`),
+  createPMEvent: (data) => request('/prediction-markets/events', { method: 'POST', body: JSON.stringify(data) }),
+  updatePMEvent: (id, data) => request(`/prediction-markets/events/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getPMSnapshots: (eventId, limit) => request(`/prediction-markets/events/${eventId}/snapshots?${new URLSearchParams({ limit: limit || 50 })}`),
+  createPMSnapshot: (eventId, data) => request(`/prediction-markets/events/${eventId}/snapshots`, { method: 'POST', body: JSON.stringify(data) }),
+  getPMLinksForThesis: (thesisId) => request(`/prediction-markets/links/thesis/${thesisId}`),
+  createPMLink: (data) => request('/prediction-markets/links', { method: 'POST', body: JSON.stringify(data) }),
+  updatePMLink: (id, data) => request(`/prediction-markets/links/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePMLink: (id) => request(`/prediction-markets/links/${id}`, { method: 'DELETE' }),
+  getPMAssessments: (thesisId) => request(`/prediction-markets/assessments/thesis/${thesisId}`),
+  getLatestPMAssessment: (thesisId) => request(`/prediction-markets/assessments/thesis/${thesisId}/latest`),
+  computePMAssessment: (thesisId) => request(`/prediction-markets/assessments/thesis/${thesisId}/compute`, { method: 'POST' }),
+
   // Health
   getHealth: () => request('/health'),
 };

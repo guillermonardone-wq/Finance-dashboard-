@@ -371,3 +371,105 @@ CREATE INDEX IF NOT EXISTS idx_market_obs_symbol ON market_observations(symbol);
 CREATE INDEX IF NOT EXISTS idx_market_obs_provider ON market_observations(provider);
 
 CREATE INDEX IF NOT EXISTS idx_cache_expires ON provider_cache(expires_at);
+
+-- ============================================================
+-- PREDICTION MARKET PROVIDERS: Registry of prediction market sources
+-- ============================================================
+CREATE TABLE IF NOT EXISTS prediction_market_providers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  provider_key TEXT NOT NULL UNIQUE,  -- e.g., 'polymarket'
+  base_url TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- PREDICTION MARKET EVENTS: Individual contracts/markets
+-- ============================================================
+CREATE TABLE IF NOT EXISTS prediction_market_events (
+  id TEXT PRIMARY KEY,
+  provider_id TEXT NOT NULL REFERENCES prediction_market_providers(id),
+  external_market_id TEXT,            -- provider's own market ID
+  title TEXT NOT NULL,
+  description TEXT,
+  url TEXT,
+  category TEXT,                      -- e.g., 'geopolitics', 'energy', 'macro'
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'resolved', 'cancelled')),
+  open_time TEXT,
+  close_time TEXT,
+  resolution_time TEXT,
+  market_type TEXT DEFAULT 'binary',  -- 'binary', 'multiple_choice', 'scalar'
+  tags_json TEXT,                     -- JSON array of tags
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- PREDICTION MARKET SNAPSHOTS: Time-series probability + liquidity
+-- ============================================================
+CREATE TABLE IF NOT EXISTS prediction_market_snapshots (
+  id TEXT PRIMARY KEY,
+  prediction_market_event_id TEXT NOT NULL REFERENCES prediction_market_events(id) ON DELETE CASCADE,
+  observed_at TEXT NOT NULL,
+  yes_price REAL,
+  no_price REAL,
+  implied_probability REAL NOT NULL CHECK (implied_probability BETWEEN 0 AND 1),
+  volume_24h REAL,
+  liquidity REAL,
+  spread REAL,
+  source_attribution TEXT NOT NULL,
+  raw_payload_ref TEXT,
+  is_stale INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- THESIS PREDICTION LINKS: Thesis ↔ contract linkage
+-- ============================================================
+CREATE TABLE IF NOT EXISTS thesis_prediction_links (
+  id TEXT PRIMARY KEY,
+  thesis_id TEXT NOT NULL REFERENCES theses(id) ON DELETE CASCADE,
+  prediction_market_event_id TEXT NOT NULL REFERENCES prediction_market_events(id) ON DELETE CASCADE,
+  link_confidence REAL NOT NULL DEFAULT 0.5 CHECK (link_confidence BETWEEN 0 AND 1),
+  link_type TEXT NOT NULL DEFAULT 'partial_match' CHECK (link_type IN (
+    'direct_match', 'partial_match', 'proxy', 'adjacent_signal'
+  )),
+  wording_match_score REAL NOT NULL DEFAULT 0.5 CHECK (wording_match_score BETWEEN 0 AND 1),
+  wording_mismatch_flag INTEGER NOT NULL DEFAULT 0,
+  rationale TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- PREDICTION MARKET ASSESSMENTS: Interpreted comparison
+-- ============================================================
+CREATE TABLE IF NOT EXISTS prediction_market_assessments (
+  id TEXT PRIMARY KEY,
+  thesis_id TEXT NOT NULL REFERENCES theses(id) ON DELETE CASCADE,
+  assessed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  thesis_probability_low REAL,
+  thesis_probability_high REAL,
+  prediction_market_implied_probability REAL,
+  divergence_score REAL,
+  consensus_state TEXT NOT NULL DEFAULT 'not_comparable' CHECK (consensus_state IN (
+    'aligned', 'mildly_divergent', 'strongly_divergent', 'not_comparable'
+  )),
+  wording_warning INTEGER NOT NULL DEFAULT 0,
+  liquidity_warning INTEGER NOT NULL DEFAULT 0,
+  thin_market_penalty REAL DEFAULT 0,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Prediction market indexes
+CREATE INDEX IF NOT EXISTS idx_pm_events_provider ON prediction_market_events(provider_id);
+CREATE INDEX IF NOT EXISTS idx_pm_events_status ON prediction_market_events(status);
+CREATE INDEX IF NOT EXISTS idx_pm_events_category ON prediction_market_events(category);
+CREATE INDEX IF NOT EXISTS idx_pm_snapshots_event ON prediction_market_snapshots(prediction_market_event_id);
+CREATE INDEX IF NOT EXISTS idx_pm_snapshots_observed ON prediction_market_snapshots(observed_at);
+CREATE INDEX IF NOT EXISTS idx_pm_links_thesis ON thesis_prediction_links(thesis_id);
+CREATE INDEX IF NOT EXISTS idx_pm_links_event ON thesis_prediction_links(prediction_market_event_id);
+CREATE INDEX IF NOT EXISTS idx_pm_assessments_thesis ON prediction_market_assessments(thesis_id);
