@@ -60,29 +60,47 @@ export default function ThesisBuilder() {
       return;
     }
     try {
+      console.log('[QuickCapture] Saving draft:', form.title.trim());
       const thesis = await createThesis({
         title: form.title.trim(),
         thesis_statement: form.thesis_statement.trim(),
         status: 'draft',
         classification: 'WATCH',
       });
+      if (!thesis || !thesis.id) {
+        setError('Save appeared to succeed but no thesis was returned. Check server logs.');
+        return;
+      }
+      console.log('[QuickCapture] Saved:', thesis.id);
       navigate(`/thesis/${thesis.id}`);
     } catch (err) {
-      setError(err.message);
+      console.error('[QuickCapture] Save failed:', err);
+      setError(err.message || 'Unknown error saving thesis');
     }
   };
 
   const handleSubmit = async () => {
     setError(null);
+    if (!form.title.trim() || !form.thesis_statement.trim()) {
+      setError('Title and thesis statement are required.');
+      return;
+    }
     try {
+      console.log('[ThesisBuilder] Submitting full thesis:', form.title.trim());
       const thesis = await createThesis({
         ...form,
         status: 'draft',
         classification: 'WATCH',
       });
+      if (!thesis || !thesis.id) {
+        setError('Save appeared to succeed but no thesis was returned. Check server logs.');
+        return;
+      }
+      console.log('[ThesisBuilder] Saved:', thesis.id);
       navigate(`/thesis/${thesis.id}`);
     } catch (err) {
-      setError(err.message);
+      console.error('[ThesisBuilder] Save failed:', err);
+      setError(err.message || 'Unknown error saving thesis');
     }
   };
 

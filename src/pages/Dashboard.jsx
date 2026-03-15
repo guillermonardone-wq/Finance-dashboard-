@@ -65,17 +65,26 @@ export default function Dashboard() {
     }
     setCaptureLoading(true);
     try {
+      console.log('[QuickCapture] Saving draft:', captureTitle.trim());
       const thesis = await createThesis({
         title: captureTitle.trim(),
         thesis_statement: captureStatement.trim(),
         status: 'draft',
         classification: 'WATCH',
       });
+      if (!thesis || !thesis.id) {
+        setCaptureError('Save appeared to succeed but no thesis was returned. Check server logs.');
+        return;
+      }
+      console.log('[QuickCapture] Saved:', thesis.id);
       setCaptureTitle('');
       setCaptureStatement('');
+      // Refresh the thesis list before navigating so the draft shows up
+      await fetchTheses();
       navigate(`/thesis/${thesis.id}`);
     } catch (err) {
-      setCaptureError(err.message);
+      console.error('[QuickCapture] Save failed:', err);
+      setCaptureError(err.message || 'Unknown error saving thesis');
     } finally {
       setCaptureLoading(false);
     }

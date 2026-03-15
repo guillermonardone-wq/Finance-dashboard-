@@ -10,7 +10,7 @@ const TABS = ['Overview', 'Evidence', 'Prediction Markets', 'Scorecard', 'Checkl
 
 export default function ThesisDetail() {
   const { id } = useParams();
-  const { activeThesis, fetchThesis, updateThesis, evaluateThesis } = useThesisStore();
+  const { activeThesis, fetchThesis, updateThesis, evaluateThesis, loading, error } = useThesisStore();
   const { signals, fetchSignals } = useSignalStore();
   const [tab, setTab] = useState('Overview');
   const [evaluation, setEvaluation] = useState(null);
@@ -28,7 +28,25 @@ export default function ThesisDetail() {
     }
   }, [activeThesis, signals, evaluateThesis]);
 
-  if (!activeThesis) return <div className="p-6 text-slate-500">Loading thesis...</div>;
+  if (loading) return <div className="p-6 text-slate-500">Loading thesis...</div>;
+  if (error) return (
+    <div className="p-6">
+      <div className="text-red-400 bg-red-400/10 border border-red-400/20 rounded p-4">
+        <p className="font-bold text-sm mb-1">Error loading thesis</p>
+        <p className="text-sm">{error}</p>
+        <Link to="/theses" className="text-xs text-cyan-400 hover:text-cyan-300 mt-3 inline-block">Back to Theses</Link>
+      </div>
+    </div>
+  );
+  if (!activeThesis) return (
+    <div className="p-6">
+      <div className="text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded p-4">
+        <p className="font-bold text-sm mb-1">Thesis not found</p>
+        <p className="text-sm text-slate-400">ID: {id}</p>
+        <Link to="/theses" className="text-xs text-cyan-400 hover:text-cyan-300 mt-3 inline-block">Back to Theses</Link>
+      </div>
+    </div>
+  );
 
   const thesis = activeThesis;
 

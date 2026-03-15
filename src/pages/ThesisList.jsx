@@ -5,7 +5,7 @@ import { ClassificationBadge, CompositeScoreBar } from '../components/common/Sco
 
 export default function ThesisList() {
   const { theses, fetchTheses, loading } = useThesisStore();
-  const [filter, setFilter] = useState('active');
+  const [filter, setFilter] = useState('all');
 
   useEffect(() => {
     fetchTheses(filter !== 'all' ? { status: filter } : {});

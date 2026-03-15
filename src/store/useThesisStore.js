@@ -21,12 +21,17 @@ export const useThesisStore = create((set, get) => ({
   },
 
   fetchThesis: async (id) => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, activeThesis: null });
     try {
       const thesis = await api.getThesis(id);
+      if (!thesis) {
+        set({ error: 'Thesis not found', loading: false });
+        return null;
+      }
       set({ activeThesis: thesis, loading: false });
       return thesis;
     } catch (err) {
+      console.error('[ThesisStore] fetchThesis failed:', err.message);
       set({ error: err.message, loading: false });
       return null;
     }
@@ -36,9 +41,14 @@ export const useThesisStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const thesis = await api.createThesis(data);
+      if (!thesis || !thesis.id) {
+        throw new Error('Server returned empty response — thesis may not have been saved');
+      }
+      console.log('[ThesisStore] Created thesis:', thesis.id, thesis.title);
       set((state) => ({ theses: [thesis, ...state.theses], loading: false }));
       return thesis;
     } catch (err) {
+      console.error('[ThesisStore] createThesis failed:', err.message);
       set({ error: err.message, loading: false });
       throw err;
     }

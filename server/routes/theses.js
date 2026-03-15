@@ -16,6 +16,7 @@ router.get('/', (req, res) => {
   sql += ' ORDER BY updated_at DESC';
 
   const rows = db.prepare(sql).all(...params);
+  console.log(`[Theses] GET / — filters: status=${status || 'all'}, returned ${rows.length} theses`);
   res.json(rows.map(parseJsonFields));
 });
 
@@ -23,7 +24,11 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const db = getDb();
   const row = db.prepare('SELECT * FROM theses WHERE id = ?').get(req.params.id);
-  if (!row) return res.status(404).json({ error: 'Thesis not found' });
+  if (!row) {
+    console.log(`[Theses] GET /${req.params.id} — NOT FOUND`);
+    return res.status(404).json({ error: 'Thesis not found' });
+  }
+  console.log(`[Theses] GET /${req.params.id} — found: "${row.title}"`);
   res.json(parseJsonFields(row));
 });
 
@@ -33,6 +38,13 @@ router.post('/', (req, res) => {
   const id = uuidv4();
   const now = new Date().toISOString();
   const t = req.body;
+
+  console.log(`[Theses] POST / — title="${t?.title}", status="${t?.status}"`);
+
+  if (!t || !t.title || !t.thesis_statement) {
+    console.log('[Theses] POST / — REJECTED: missing title or thesis_statement');
+    return res.status(400).json({ error: 'Title and thesis statement are required.' });
+  }
 
   // Draft theses skip behavioral gates — rigor is enforced at classification upgrade
   const isDraft = (t.status || 'draft') === 'draft';
@@ -89,10 +101,16 @@ router.post('/', (req, res) => {
       JSON.stringify(t.tags || [])
     );
   } catch (err) {
+    console.error(`[Theses] POST / — DB INSERT FAILED: ${err.message}`);
     return res.status(500).json({ error: err.message });
   }
 
   const created = db.prepare('SELECT * FROM theses WHERE id = ?').get(id);
+  if (!created) {
+    console.error(`[Theses] POST / — INSERT succeeded but SELECT returned null for id=${id}`);
+    return res.status(500).json({ error: 'Thesis was not saved — database write failed silently.' });
+  }
+  console.log(`[Theses] POST / — CREATED id=${id}`);
   res.status(201).json(parseJsonFields(created));
 });
 
