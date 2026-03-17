@@ -37,10 +37,14 @@ export default function ThesisDetail() {
   const { signals, fetchSignals } = useSignalStore();
   const [tab, setTab] = useState('Overview');
 
-  // Fetch thesis and its linked signals
+  // Fetch thesis and its linked signals; clear stale signals immediately on ID change
   useEffect(() => {
-    fetchThesis(id);
     fetchSignals({ thesis_id: id });
+    fetchThesis(id);
+    return () => {
+      // Clear signals when leaving this thesis — prevents stale data on next navigation
+      useSignalStore.setState({ signals: [] });
+    };
   }, [id, fetchThesis, fetchSignals]);
 
   // Evaluation hook — encapsulates scoring, re-scoring, and persistence

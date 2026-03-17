@@ -28,12 +28,17 @@ export const useThesisStore = create((set, get) => ({
     try {
       const thesis = await api.getThesis(id);
       if (!thesis) {
-        set({ error: 'Thesis not found', loading: false });
+        set({ activeThesis: null, loading: false });
         return null;
       }
       set({ activeThesis: thesis, loading: false });
       return thesis;
     } catch (err) {
+      // 404s are not-found, not errors — let the UI show the not-found block
+      if (err.message?.includes('not found') || err.message?.includes('404')) {
+        set({ activeThesis: null, loading: false });
+        return null;
+      }
       console.error('[ThesisStore] fetchThesis failed:', err.message);
       set({ error: err.message, loading: false });
       return null;

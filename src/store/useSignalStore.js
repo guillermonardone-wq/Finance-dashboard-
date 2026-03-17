@@ -39,16 +39,15 @@ export const useSignalStore = create((set) => ({
   },
 
   updateSignal: async (id, data) => {
-    set({ loading: true, error: null });
+    set({ error: null });
     try {
       const signal = await api.updateSignal(id, data);
       set((state) => ({
         signals: state.signals.map(s => s.id === id ? signal : s),
-        loading: false,
       }));
       return signal;
     } catch (err) {
-      set({ error: err.message, loading: false });
+      set({ error: err.message });
       throw err;
     }
   },
