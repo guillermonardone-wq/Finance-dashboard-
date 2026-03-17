@@ -380,14 +380,29 @@ export default function SignalInbox() {
 
               <div className="flex-1 min-w-0">
                 {/* Title row */}
-                <h3 className="text-sm font-medium text-slate-200 truncate">{signal.title}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-medium text-slate-200 truncate">{signal.title}</h3>
+                  {signal.direction && signal.direction !== 'neutral' && (
+                    <DirectionBadge direction={signal.direction} />
+                  )}
+                  {signal.significance && signal.significance >= 3 && (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono">
+                      {signal.significance}/5
+                    </span>
+                  )}
+                </div>
 
-                {/* Description */}
-                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{signal.description}</p>
+                {/* Summary or description */}
+                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{signal.summary || signal.description}</p>
 
-                {/* Metadata row: badge, timestamp, category */}
+                {/* Metadata row */}
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                   <SourceBadge type={signal.source_type} />
+                  {signal.entity && (
+                    <span className="text-xs font-mono bg-slate-800 text-cyan-400 px-1.5 py-0.5 rounded">
+                      {signal.entity}
+                    </span>
+                  )}
                   <span className="text-xs text-slate-600">{timeAgo(signal.created_at)}</span>
                   {signal.category && signal.category !== 'other' && (
                     <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
@@ -396,6 +411,11 @@ export default function SignalInbox() {
                   )}
                   {signal.novelty === 'new' && (
                     <span className="text-xs text-amber-400">new</span>
+                  )}
+                  {signal.value != null && (
+                    <span className="text-xs text-slate-500 font-mono">
+                      {signal.value.toFixed(2)}{signal.change != null ? ` (${signal.change >= 0 ? '+' : ''}${signal.change.toFixed(2)})` : ''}
+                    </span>
                   )}
                   {signal.source_url && (
                     <a
@@ -473,6 +493,19 @@ export default function SignalInbox() {
         )}
       </div>
     </div>
+  );
+}
+
+function DirectionBadge({ direction }) {
+  const styles = {
+    bullish: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+    bearish: 'bg-red-500/10 text-red-400 border border-red-500/20',
+    neutral: 'bg-slate-700 text-slate-400',
+  };
+  return (
+    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${styles[direction] || styles.neutral}`}>
+      {direction}
+    </span>
   );
 }
 

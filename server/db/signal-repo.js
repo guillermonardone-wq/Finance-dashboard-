@@ -4,13 +4,17 @@
 
 import { getKnex, userScoped } from "./connection.js";
 
-export async function findAll({ status, category, thesis_id } = {}, userId = "default") {
+export async function findAll({ status, category, thesis_id, source, entity, limit } = {}, userId = "default") {
   const knex = getKnex();
   let query = knex("signals").where(userScoped(userId));
   if (status) query = query.where("status", status);
   if (category) query = query.where("category", category);
   if (thesis_id) query = query.where("thesis_id", thesis_id);
-  return query.orderBy("created_at", "desc");
+  if (source) query = query.where("source_provider", source);
+  if (entity) query = query.where("entity", entity);
+  query = query.orderBy("created_at", "desc");
+  if (limit) query = query.limit(parseInt(limit));
+  return query;
 }
 
 export async function findById(id, userId = "default") {
@@ -56,6 +60,13 @@ export async function create(id, data, userId = "default") {
     related_signal_ids: s.related_signal_ids || [],
     status: s.status || "inbox",
     tags: s.tags || [],
+    entity: s.entity || null,
+    value: s.value != null ? s.value : null,
+    previous_value: s.previous_value != null ? s.previous_value : null,
+    change: s.change != null ? s.change : null,
+    significance: s.significance != null ? s.significance : null,
+    direction: s.direction || null,
+    summary: s.summary || null,
   };
 
   await knex("signals").insert(row);
@@ -88,6 +99,13 @@ export async function update(id, data, userId = "default") {
   if (s.related_signal_ids !== undefined) updates.related_signal_ids = s.related_signal_ids;
   if (s.status != null) updates.status = s.status;
   if (s.tags !== undefined) updates.tags = s.tags;
+  if (s.entity !== undefined) updates.entity = s.entity;
+  if (s.value !== undefined) updates.value = s.value;
+  if (s.previous_value !== undefined) updates.previous_value = s.previous_value;
+  if (s.change !== undefined) updates.change = s.change;
+  if (s.significance !== undefined) updates.significance = s.significance;
+  if (s.direction !== undefined) updates.direction = s.direction;
+  if (s.summary !== undefined) updates.summary = s.summary;
 
   await knex("signals").where({ id }).update(updates);
   return findById(id, userId);
