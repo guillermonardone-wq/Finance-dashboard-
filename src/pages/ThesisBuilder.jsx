@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useThesisStore } from '../store/useThesisStore';
+import { useSignalStore } from '../store/useSignalStore';
 import { BEHAVIORAL_PROMPTS } from '../engine/behavioral';
 
 const EMPTY_THESIS = {
@@ -26,7 +27,46 @@ const EMPTY_THESIS = {
 };
 
 export default function ThesisBuilder() {
-  const [form, setForm] = useState({ ...EMPTY_THESIS });
+  const location = useLocation();
+  const { updateSignal, fetchCounts } = useSignalStore();
+
+  // Derive initial form state from navigation (single signal or multiple)
+  const { initialForm, linkedSignalIds, sourceLabel } = useMemo(() => {
+    const state = location.state;
+    const ids = [];
+    let form = { ...EMPTY_THESIS };
+    let label = null;
+
+    if (state?.fromSignal) {
+      // Single signal → pre-fill title & description
+      const s = state.fromSignal;
+      ids.push(s.id);
+      form = {
+        ...form,
+        title: s.title || '',
+        thesis_statement: s.description || '',
+      };
+      label = `from signal: ${s.title?.slice(0, 50)}`;
+    } else if (state?.fromSignals && state.fromSignals.length > 0) {
+      // Multiple signals → combine
+      const sigs = state.fromSignals;
+      for (const s of sigs) ids.push(s.id);
+
+      const titles = sigs.map(s => s.title).filter(Boolean);
+      const descriptions = sigs.map(s => `- ${s.title}: ${s.description || ''}`).join('\n');
+
+      form = {
+        ...form,
+        title: titles.length === 1 ? titles[0] : '',
+        thesis_statement: descriptions,
+      };
+      label = `from ${sigs.length} signals`;
+    }
+
+    return { initialForm: form, linkedSignalIds: ids, sourceLabel: label };
+  }, [location.state]);
+
+  const [form, setForm] = useState(initialForm);
   const [error, setError] = useState(null);
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState('quick'); // 'quick' or 'full'
@@ -53,6 +93,18 @@ export default function ThesisBuilder() {
     setForm(f => ({ ...f, [field]: [...(f[field] || []), template] }));
   };
 
+  // After creating a thesis, link any signals that spawned it
+  const linkSignalsToThesis = async (thesisId) => {
+    for (const signalId of linkedSignalIds) {
+      try {
+        await updateSignal(signalId, { thesis_id: thesisId, status: 'linked' });
+      } catch (err) {
+        console.warn(`[ThesisBuilder] Failed to link signal ${signalId}:`, err.message);
+      }
+    }
+    if (linkedSignalIds.length > 0) fetchCounts();
+  };
+
   const handleQuickCapture = async () => {
     setError(null);
     if (!form.title.trim() || !form.thesis_statement.trim()) {
@@ -72,6 +124,7 @@ export default function ThesisBuilder() {
         return;
       }
       console.log('[QuickCapture] Saved:', thesis.id);
+      await linkSignalsToThesis(thesis.id);
       navigate(`/thesis/${thesis.id}`);
     } catch (err) {
       console.error('[QuickCapture] Save failed:', err);
@@ -97,6 +150,7 @@ export default function ThesisBuilder() {
         return;
       }
       console.log('[ThesisBuilder] Saved:', thesis.id);
+      await linkSignalsToThesis(thesis.id);
       navigate(`/thesis/${thesis.id}`);
     } catch (err) {
       console.error('[ThesisBuilder] Save failed:', err);
@@ -114,6 +168,17 @@ export default function ThesisBuilder() {
           <h1 className="text-2xl font-bold text-slate-100">Quick Capture</h1>
           <p className="text-sm text-slate-500 mt-1">Capture the idea now. Add structure later.</p>
         </div>
+
+        {sourceLabel && (
+          <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-3 mb-4 flex items-center gap-2">
+            <span className="text-xs text-cyan-400">Creating thesis {sourceLabel}</span>
+            {linkedSignalIds.length > 0 && (
+              <span className="text-xs text-slate-500">
+                ({linkedSignalIds.length} signal{linkedSignalIds.length !== 1 ? 's' : ''} will be auto-linked on save)
+              </span>
+            )}
+          </div>
+        )}
 
         {error && (
           <div className="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded p-3 mb-4">{error}</div>

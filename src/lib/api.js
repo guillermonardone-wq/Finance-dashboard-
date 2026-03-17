@@ -22,6 +22,7 @@ export const api = {
 
   // Signals
   getSignals: (params) => request(`/signals?${new URLSearchParams(params || {})}`),
+  getSignalCounts: () => request('/signals/counts'),
   getSignal: (id) => request(`/signals/${id}`),
   createSignal: (data) => request('/signals', { method: 'POST', body: JSON.stringify(data) }),
   updateSignal: (id, data) => request(`/signals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

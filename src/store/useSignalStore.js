@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 
 export const useSignalStore = create((set) => ({
   signals: [],
+  counts: {},
   loading: false,
   error: null,
 
@@ -13,6 +14,15 @@ export const useSignalStore = create((set) => ({
       set({ signals, loading: false });
     } catch (err) {
       set({ error: err.message, loading: false });
+    }
+  },
+
+  fetchCounts: async () => {
+    try {
+      const counts = await api.getSignalCounts();
+      set({ counts });
+    } catch {
+      // Silent fail — counts are non-critical
     }
   },
 

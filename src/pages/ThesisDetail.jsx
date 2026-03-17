@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useThesisStore } from '../store/useThesisStore';
 import { useSignalStore } from '../store/useSignalStore';
+import { api } from '../lib/api';
 import { LAYERS, ALL_FACTORS } from '../engine/scoring';
 import {
   ClassificationBadge, CompositeScoreBar, LayerScoreSummary,
@@ -11,15 +12,27 @@ import {
 import PredictionMarketTab from '../components/PredictionMarketTab';
 import AdvisoryTab from '../components/AdvisoryTab';
 
+const SOURCE_BADGE_COLORS = {
+  manual: 'bg-slate-700 text-slate-300',
+  fred: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+  gdelt: 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
+  news_feed: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
+  market_data: 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30',
+  government: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+};
+
 const TABS = ['Overview', 'Evidence', 'Prediction Markets', 'LLM Review', 'Scorecard', 'Checklist', 'Audit Log'];
 
 export default function ThesisDetail() {
   const { id } = useParams();
   const { activeThesis, fetchThesis, updateThesis, evaluateThesis, loading, error } = useThesisStore();
-  const { signals, fetchSignals } = useSignalStore();
+  const { signals, fetchSignals, updateSignal, fetchCounts } = useSignalStore();
   const [tab, setTab] = useState('Overview');
   const [evaluation, setEvaluation] = useState(null);
   const [manualScores, setManualScores] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSignalSearch, setShowSignalSearch] = useState(false);
 
   useEffect(() => {
     fetchThesis(id);
@@ -231,25 +244,129 @@ export default function ThesisDetail() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-sm font-bold text-slate-300">Linked Signals</h2>
-            <span className="text-xs text-slate-500">{signals.length} signals</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-500">{signals.length} signal{signals.length !== 1 ? 's' : ''}</span>
+              <button
+                onClick={() => setShowSignalSearch(!showSignalSearch)}
+                className="px-3 py-1.5 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 rounded transition-colors"
+              >
+                {showSignalSearch ? 'Close' : '+ Add Signal'}
+              </button>
+            </div>
           </div>
+
+          {/* Signal search / browse panel */}
+          {showSignalSearch && (
+            <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+              <input
+                value={searchQuery}
+                onChange={async (e) => {
+                  setSearchQuery(e.target.value);
+                  if (e.target.value.trim().length >= 2) {
+                    try {
+                      const results = await api.getSignals({ status: 'inbox' });
+                      const q = e.target.value.toLowerCase();
+                      setSearchResults(
+                        results.filter(s =>
+                          s.title.toLowerCase().includes(q) ||
+                          (s.description && s.description.toLowerCase().includes(q))
+                        ).slice(0, 10)
+                      );
+                    } catch { setSearchResults([]); }
+                  } else if (e.target.value.trim().length === 0) {
+                    // Show recent unlinked signals when empty
+                    try {
+                      const results = await api.getSignals({ status: 'inbox' });
+                      setSearchResults(results.slice(0, 10));
+                    } catch { setSearchResults([]); }
+                  }
+                }}
+                onFocus={async () => {
+                  if (searchResults.length === 0) {
+                    try {
+                      const results = await api.getSignals({ status: 'inbox' });
+                      setSearchResults(results.slice(0, 10));
+                    } catch { /* ignore */ }
+                  }
+                }}
+                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 mb-3"
+                placeholder="Search inbox signals by title or description..."
+                autoFocus
+              />
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {searchResults.length === 0 ? (
+                  <p className="text-xs text-slate-600 py-4 text-center">
+                    {searchQuery ? 'No matching signals in inbox.' : 'No unlinked signals available.'}
+                  </p>
+                ) : (
+                  searchResults.map(s => {
+                    const alreadyLinked = signals.some(linked => linked.id === s.id);
+                    return (
+                      <div key={s.id} className="flex items-center justify-between px-3 py-2 rounded bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                        <div className="flex-1 min-w-0 mr-3">
+                          <p className="text-xs text-slate-200 truncate">{s.title}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <EvidenceSourceBadge type={s.source_type} />
+                            <span className="text-xs text-slate-600">{s.category?.replace(/_/g, ' ')}</span>
+                          </div>
+                        </div>
+                        {alreadyLinked ? (
+                          <span className="text-xs text-slate-600 flex-shrink-0">linked</span>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              await updateSignal(s.id, { thesis_id: id, status: 'linked' });
+                              fetchSignals({ thesis_id: id });
+                              fetchCounts();
+                              setSearchResults(prev => prev.filter(r => r.id !== s.id));
+                            }}
+                            className="px-2 py-1 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 rounded flex-shrink-0 transition-colors"
+                          >
+                            Link
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Linked signals list */}
           {signals.length === 0 ? (
             <p className="text-sm text-slate-600 py-8 text-center">
-              No linked signals. Go to Signal Inbox to link evidence.
+              No linked signals yet. Click "+ Add Signal" to search and link evidence.
             </p>
           ) : (
             signals.map(s => (
               <div key={s.id} className="bg-slate-800/50 rounded p-3 border border-slate-700/30">
-                <div className="flex justify-between">
-                  <span className="text-sm text-slate-200">{s.title}</span>
-                  <span className={`text-xs ${s.reliability === 'verified' ? 'text-emerald-400' : 'text-slate-500'}`}>
-                    {s.reliability}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">{s.description}</p>
-                <div className="flex gap-2 mt-2 text-xs text-slate-600">
-                  <span>{s.category?.replace(/_/g, ' ')}</span>
-                  {s.source_attribution && <span>via {s.source_attribution}</span>}
+                <div className="flex justify-between items-start">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-200">{s.title}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{s.description}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <EvidenceSourceBadge type={s.source_type} />
+                      <span className="text-xs text-slate-600">{s.category?.replace(/_/g, ' ')}</span>
+                      {s.source_attribution && <span className="text-xs text-slate-600">via {s.source_attribution}</span>}
+                      <span className={`text-xs ${s.reliability === 'verified' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        {s.reliability}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await updateSignal(s.id, { thesis_id: null, status: 'inbox' });
+                      fetchSignals({ thesis_id: id });
+                      fetchCounts();
+                    }}
+                    className="px-2 py-1 text-xs text-slate-500 hover:text-red-400 rounded ml-2 flex-shrink-0 transition-colors"
+                    title="Unlink this signal"
+                  >
+                    unlink
+                  </button>
                 </div>
               </div>
             ))
@@ -405,5 +522,15 @@ function MetricCard({ label, value, warn }) {
       <p className="text-xs text-slate-500">{label}</p>
       <p className={`text-sm font-medium mt-1 ${warn ? 'text-amber-400' : 'text-slate-300'}`}>{value}</p>
     </div>
+  );
+}
+
+function EvidenceSourceBadge({ type }) {
+  const colors = SOURCE_BADGE_COLORS[type] || 'bg-slate-700 text-slate-400';
+  const label = type === 'news_feed' ? 'news' : type === 'market_data' ? 'market' : (type || '').replace(/_/g, ' ');
+  return (
+    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${colors}`}>
+      {label}
+    </span>
   );
 }

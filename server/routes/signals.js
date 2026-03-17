@@ -20,6 +20,19 @@ router.get('/', (req, res) => {
   res.json(rows.map(r => parseJson(r, ['related_signal_ids', 'tags'])));
 });
 
+// GET signal counts by status
+router.get('/counts', (req, res) => {
+  const db = getDb();
+  const rows = db.prepare(
+    "SELECT status, COUNT(*) as count FROM signals GROUP BY status"
+  ).all();
+  const counts = {};
+  for (const row of rows) {
+    counts[row.status] = row.count;
+  }
+  res.json(counts);
+});
+
 // GET single signal
 router.get('/:id', (req, res) => {
   const db = getDb();
@@ -88,6 +101,9 @@ router.put('/:id', (req, res) => {
   const s = req.body;
   const now = new Date().toISOString();
 
+  // Allow explicitly setting thesis_id to null (unlinking)
+  const hasExplicitThesisId = 'thesis_id' in s;
+
   try {
     db.prepare(`
       UPDATE signals SET
@@ -98,7 +114,7 @@ router.put('/:id', (req, res) => {
         source_attribution = COALESCE(?, source_attribution),
         novelty = COALESCE(?, novelty), reliability = COALESCE(?, reliability),
         signal_strength = COALESCE(?, signal_strength),
-        thesis_id = COALESCE(?, thesis_id),
+        thesis_id = ${hasExplicitThesisId ? '?' : 'thesis_id'},
         related_signal_ids = COALESCE(?, related_signal_ids),
         status = COALESCE(?, status),
         tags = COALESCE(?, tags)
@@ -107,7 +123,7 @@ router.put('/:id', (req, res) => {
       now, s.category, s.subcategory, s.title, s.description,
       s.raw_source, s.source_type, s.source_provider, s.source_url, s.source_attribution,
       s.novelty, s.reliability, s.signal_strength,
-      s.thesis_id,
+      ...(hasExplicitThesisId ? [s.thesis_id] : []),
       s.related_signal_ids ? JSON.stringify(s.related_signal_ids) : null,
       s.status,
       s.tags ? JSON.stringify(s.tags) : null,

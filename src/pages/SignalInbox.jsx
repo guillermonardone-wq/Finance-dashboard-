@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSignalStore } from '../store/useSignalStore';
 import { useThesisStore } from '../store/useThesisStore';
 
@@ -29,21 +30,35 @@ const EMPTY_SIGNAL = {
   signal_strength: 0.5, tags: [],
 };
 
+// Status filter mapping: user-facing label -> DB status value
+const STATUS_FILTERS = [
+  { label: 'New', status: 'inbox' },
+  { label: 'Linked', status: 'linked' },
+  { label: 'Dismissed', status: 'noise' },
+  { label: 'All', status: null },
+];
+
 export default function SignalInbox() {
-  const { signals, fetchSignals, createSignal, updateSignal } = useSignalStore();
+  const { signals, fetchSignals, createSignal, updateSignal, fetchCounts } = useSignalStore();
   const { theses, fetchTheses } = useThesisStore();
+  const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_SIGNAL });
-  const [filter, setFilter] = useState('inbox');
+  const [activeFilter, setActiveFilter] = useState('New');
   const [error, setError] = useState(null);
   const [quickText, setQuickText] = useState('');
   const [quickError, setQuickError] = useState(null);
   const [linkingSignalId, setLinkingSignalId] = useState(null);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const quickInputRef = useRef(null);
 
+  const currentStatusFilter = STATUS_FILTERS.find(f => f.label === activeFilter);
+
   useEffect(() => {
-    fetchSignals(filter !== 'all' ? { status: filter } : {});
-  }, [fetchSignals, filter]);
+    const params = currentStatusFilter?.status ? { status: currentStatusFilter.status } : {};
+    fetchSignals(params);
+  }, [fetchSignals, activeFilter, currentStatusFilter?.status]);
 
   useEffect(() => {
     fetchTheses();
@@ -56,7 +71,6 @@ export default function SignalInbox() {
     if (!text) return;
     setQuickError(null);
 
-    // Detect if it's a URL
     const isUrl = /^https?:\/\//.test(text);
 
     try {
@@ -71,6 +85,7 @@ export default function SignalInbox() {
         reliability: 'unverified',
       });
       setQuickText('');
+      fetchCounts();
       quickInputRef.current?.focus();
     } catch (err) {
       setQuickError(err.message);
@@ -84,6 +99,7 @@ export default function SignalInbox() {
       await createSignal(form);
       setForm({ ...EMPTY_SIGNAL });
       setShowForm(false);
+      fetchCounts();
     } catch (err) {
       setError(err.message);
     }
@@ -91,11 +107,61 @@ export default function SignalInbox() {
 
   const handleStatusChange = async (id, newStatus) => {
     await updateSignal(id, { status: newStatus });
+    fetchCounts();
   };
 
   const handleLinkToThesis = async (signalId, thesisId) => {
     await updateSignal(signalId, { thesis_id: thesisId, status: 'linked' });
     setLinkingSignalId(null);
+    fetchCounts();
+  };
+
+  // Start Thesis from Signal — navigate to Quick Capture pre-filled
+  const handleStartThesis = (signal) => {
+    navigate('/thesis/new', {
+      state: {
+        fromSignal: {
+          id: signal.id,
+          title: signal.title,
+          description: signal.description,
+          category: signal.category,
+          source_type: signal.source_type,
+        },
+      },
+    });
+  };
+
+  // Bulk: Create Thesis from Selected signals
+  const handleBulkCreateThesis = () => {
+    const selected = signals.filter(s => selectedIds.has(s.id));
+    if (selected.length === 0) return;
+    navigate('/thesis/new', {
+      state: {
+        fromSignals: selected.map(s => ({
+          id: s.id,
+          title: s.title,
+          description: s.description,
+          category: s.category,
+          source_type: s.source_type,
+        })),
+      },
+    });
+  };
+
+  const toggleSelection = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleBulkMode = () => {
+    if (bulkMode) {
+      setSelectedIds(new Set());
+    }
+    setBulkMode(!bulkMode);
   };
 
   function timeAgo(dateStr) {
@@ -144,29 +210,55 @@ export default function SignalInbox() {
         )}
       </form>
 
-      {/* Expanded form toggle */}
+      {/* Filter + actions bar */}
       <div className="flex justify-between items-center mb-4">
-        {/* Filter tabs */}
         <div className="flex gap-1">
-          {['inbox', 'reviewing', 'linked', 'noise', 'all'].map(f => (
+          {STATUS_FILTERS.map(f => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
+              key={f.label}
+              onClick={() => setActiveFilter(f.label)}
               className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                filter === f ? 'bg-slate-700 text-slate-200' : 'text-slate-500 hover:text-slate-300'
+                activeFilter === f.label ? 'bg-slate-700 text-slate-200' : 'text-slate-500 hover:text-slate-300'
               }`}
             >
-              {f}
+              {f.label}
             </button>
           ))}
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded transition-colors"
-        >
-          {showForm ? 'Cancel' : 'Full Form'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={toggleBulkMode}
+            className={`px-3 py-1.5 text-xs rounded border transition-colors ${
+              bulkMode
+                ? 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10'
+                : 'text-slate-500 hover:text-slate-300 border-slate-700'
+            }`}
+          >
+            {bulkMode ? 'Cancel Select' : 'Select Multiple'}
+          </button>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded transition-colors"
+          >
+            {showForm ? 'Cancel' : 'Full Form'}
+          </button>
+        </div>
       </div>
+
+      {/* Bulk action bar */}
+      {bulkMode && selectedIds.size > 0 && (
+        <div className="mb-4 p-3 bg-cyan-500/5 border border-cyan-500/20 rounded-lg flex items-center justify-between">
+          <span className="text-sm text-cyan-400">
+            {selectedIds.size} signal{selectedIds.size !== 1 ? 's' : ''} selected
+          </span>
+          <button
+            onClick={handleBulkCreateThesis}
+            className="px-4 py-2 bg-cyan-500 text-slate-950 font-bold rounded text-sm hover:bg-cyan-400 transition-colors"
+          >
+            Create Thesis from Selected
+          </button>
+        </div>
+      )}
 
       {/* Expanded create form */}
       {showForm && (
@@ -270,13 +362,25 @@ export default function SignalInbox() {
       {/* Signal list — newest first */}
       <div className="space-y-2">
         {signals.map(signal => (
-          <div key={signal.id} className="bg-slate-900 rounded-lg border border-slate-800 p-4 hover:border-slate-700 transition-colors">
+          <div key={signal.id} className={`bg-slate-900 rounded-lg border p-4 hover:border-slate-700 transition-colors ${
+            selectedIds.has(signal.id) ? 'border-cyan-500/50' : 'border-slate-800'
+          }`}>
             <div className="flex justify-between items-start">
+              {/* Checkbox for bulk mode */}
+              {bulkMode && (
+                <div className="mr-3 flex-shrink-0 pt-0.5">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(signal.id)}
+                    onChange={() => toggleSelection(signal.id)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500/30"
+                  />
+                </div>
+              )}
+
               <div className="flex-1 min-w-0">
                 {/* Title row */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-sm font-medium text-slate-200 truncate">{signal.title}</h3>
-                </div>
+                <h3 className="text-sm font-medium text-slate-200 truncate">{signal.title}</h3>
 
                 {/* Description */}
                 <p className="text-xs text-slate-500 mt-1 line-clamp-2">{signal.description}</p>
@@ -308,27 +412,22 @@ export default function SignalInbox() {
 
               {/* Actions */}
               <div className="flex gap-1 ml-3 flex-shrink-0">
-                {signal.status === 'inbox' && (
+                {(signal.status === 'inbox' || signal.status === 'reviewing') && (
                   <>
+                    <button
+                      onClick={() => handleStartThesis(signal)}
+                      className="px-2 py-1 rounded text-xs transition-colors text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20"
+                      title="Start a new thesis pre-filled from this signal"
+                    >
+                      Start Thesis
+                    </button>
                     <button
                       onClick={() => setLinkingSignalId(linkingSignalId === signal.id ? null : signal.id)}
                       className="px-2 py-1 rounded text-xs transition-colors text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20"
                     >
                       Link to Thesis
                     </button>
-                    <StatusBtn label="Review" onClick={() => handleStatusChange(signal.id, 'reviewing')} />
-                    <StatusBtn label="Noise" onClick={() => handleStatusChange(signal.id, 'noise')} color="red" />
-                  </>
-                )}
-                {signal.status === 'reviewing' && (
-                  <>
-                    <button
-                      onClick={() => setLinkingSignalId(linkingSignalId === signal.id ? null : signal.id)}
-                      className="px-2 py-1 rounded text-xs transition-colors text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20"
-                    >
-                      Link to Thesis
-                    </button>
-                    <StatusBtn label="Noise" onClick={() => handleStatusChange(signal.id, 'noise')} color="red" />
+                    <StatusBtn label="Dismiss" onClick={() => handleStatusChange(signal.id, 'noise')} color="red" />
                   </>
                 )}
                 {signal.status === 'linked' && signal.thesis_id && (
@@ -339,6 +438,9 @@ export default function SignalInbox() {
                     View Thesis
                   </a>
                 )}
+                {signal.status === 'noise' && (
+                  <StatusBtn label="Restore" onClick={() => handleStatusChange(signal.id, 'inbox')} color="slate" />
+                )}
               </div>
             </div>
 
@@ -348,7 +450,7 @@ export default function SignalInbox() {
                 <p className="text-xs text-slate-500 mb-2">Select a thesis to link this signal to:</p>
                 <div className="space-y-1 max-h-48 overflow-y-auto">
                   {theses.length === 0 ? (
-                    <p className="text-xs text-slate-600">No theses yet. Create one first.</p>
+                    <p className="text-xs text-slate-600">No theses yet. Use "Start Thesis" to create one from this signal.</p>
                   ) : (
                     theses.map(t => (
                       <button
