@@ -42,7 +42,20 @@ npm run dev:client   # Vite dev server (port 5173, proxies /api to 3002)
 npm run dev:server   # Express API server (port 3002)
 ```
 
-The database auto-migrates (Knex migrations) and seeds on first run.
+The database auto-migrates (Knex migrations) and seeds on first run. The server retries DB connections on startup (up to 10 attempts with exponential backoff), so it's safe to start the app before PostgreSQL is fully ready.
+
+### Manual migration
+
+```bash
+# Run migrations via Knex CLI
+npm run db:migrate
+
+# Rollback last batch
+npm run db:rollback
+
+# Manual seed (if DB is empty, auto-seed runs on startup)
+npm run seed
+```
 
 ## Environment variables
 
@@ -71,7 +84,7 @@ All API keys are optional. The app runs fully without any external providers.
 ```bash
 # Run all tests — scoring engine, classification, gates, checklist,
 # thesis repo safety, column allowlist, config, auth, system health,
-# provider health, dead letter queue, user_id scoping (vitest, 221 tests)
+# provider health, dead letter queue, user_id scoping, integration startup (vitest, 227 tests)
 npm test
 
 # Watch mode
@@ -111,5 +124,5 @@ npm run test:watch
 - All config centralized in `server/config.js` — no `process.env` outside that file
 - Provider health tracked in `provider_health` table, auto-updated on every provider call
 - Failed async jobs logged to `dead_letter_queue` with exponential backoff retry
-- 221 automated tests covering scoring, classification, gates, checklist, thesis repo safety, config, auth, system health, provider health, dead letter queue, user_id scoping
+- 227 automated tests covering scoring, classification, gates, checklist, thesis repo safety, config, auth, system health, provider health, dead letter queue, user_id scoping, integration startup
 - Root-level ErrorBoundary catches crashes in any route
