@@ -19,7 +19,7 @@ A macro decision engine for tracking geopolitical and economic signals, developi
 | Frontend | React 19, Vite, Zustand, TailwindCSS |
 | Backend | Express 5, Node.js |
 | Database | SQLite (better-sqlite3, WAL mode) |
-| Testing | Vitest + legacy Node.js test runner |
+| Testing | Vitest |
 
 ## Local setup
 
@@ -62,11 +62,8 @@ All API keys are optional. The app runs fully without any external providers.
 ## Running tests
 
 ```bash
-# Run thesis workflow + scoring engine tests (vitest)
+# Run all tests (vitest)
 npm test
-
-# Run legacy provider/normalization tests
-npm run test:legacy
 
 # Watch mode
 npm run test:watch

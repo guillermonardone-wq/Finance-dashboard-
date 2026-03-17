@@ -125,7 +125,7 @@ const JSON_COLUMNS = new Set(JSON_FIELDS);
 // All columns that callers may update. This is the authoritative allowlist.
 // Any key in `data` not in this set is silently ignored — prevents SQL injection
 // via crafted key names and ensures only known columns are written.
-const UPDATABLE_COLUMNS = new Set([
+export const UPDATABLE_COLUMNS = new Set([
   "title",
   "thesis_statement",
   "causal_chain",
