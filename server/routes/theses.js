@@ -149,6 +149,7 @@ router.put('/:id', (req, res) => {
     scoreAtApproval = t.composite_score;
   }
 
+  try {
   db.prepare(`
     UPDATE theses SET
       updated_at = ?, title = COALESCE(?, title), thesis_statement = COALESCE(?, thesis_statement),
@@ -265,6 +266,10 @@ router.put('/:id', (req, res) => {
     t.tags ? JSON.stringify(t.tags) : null,
     req.params.id
   );
+  } catch (err) {
+    console.error(`[Theses] PUT /${req.params.id} — DB UPDATE FAILED: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  }
 
   const updated = db.prepare('SELECT * FROM theses WHERE id = ?').get(req.params.id);
   res.json(parseJsonFields(updated));
