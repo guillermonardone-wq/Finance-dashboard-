@@ -16,9 +16,9 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<AppShell />}>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<SignalInbox />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/bot" element={<BotFeed />} />
-          <Route path="/signals" element={<SignalInbox />} />
           <Route path="/theses" element={<ThesisList />} />
           <Route path="/thesis/new" element={<ThesisBuilder />} />
           <Route path="/thesis/:id" element={<ThesisDetail />} />

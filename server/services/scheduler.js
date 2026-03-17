@@ -8,6 +8,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { ingestion } from './ingestion.js';
 import { registry } from '../providers/registry.js';
 import { getDb } from '../db/connection.js';
+import { checkFredSignals } from './fred-signals.js';
+import { checkGdeltSignals } from './gdelt-signals.js';
 
 const WATCHLIST = ['SPY', 'QQQ', 'TLT', 'GLD', 'USO', 'UUP', 'EEM', 'IWM'];
 const FRED_SERIES = ['CPI', 'GDP', 'UNRATE', 'FEDFUNDS', 'DGS10', 'DGS2'];
@@ -17,6 +19,8 @@ const INTERVALS = {
   prices: parseInt(process.env.REFRESH_INTERVAL_PRICES) || 300,
   news: parseInt(process.env.REFRESH_INTERVAL_NEWS) || 900,
   macro: parseInt(process.env.REFRESH_INTERVAL_MACRO) || 3600,
+  fredSignals: parseInt(process.env.REFRESH_INTERVAL_FRED_SIGNALS) || 86400, // daily
+  gdeltSignals: parseInt(process.env.REFRESH_INTERVAL_GDELT_SIGNALS) || 1800,  // 30 minutes
 };
 
 // Map news keywords to signal categories
@@ -155,6 +159,14 @@ export async function startScheduler() {
     console.log('[Scheduler] Running initial data fetch...');
     await Promise.allSettled([fetchPrices(), fetchNews(), fetchMacro()]);
     console.log('[Scheduler] Initial fetch complete.');
+
+    // Run FRED signal check shortly after macro data is fetched
+    console.log('[Scheduler] Running initial FRED signal check...');
+    await checkFredSignals().catch(err => console.warn('[Scheduler] FRED signal check failed:', err.message));
+
+    // Run initial GDELT check
+    console.log('[Scheduler] Running initial GDELT check...');
+    await checkGdeltSignals().catch(err => console.warn('[Scheduler] GDELT check failed:', err.message));
   }, 3000);
 
   // Schedule recurring fetches
@@ -162,5 +174,15 @@ export async function startScheduler() {
   setInterval(fetchNews, INTERVALS.news * 1000);
   setInterval(fetchMacro, INTERVALS.macro * 1000);
 
-  console.log(`[Scheduler] Started — prices every ${INTERVALS.prices}s, news every ${INTERVALS.news}s, macro every ${INTERVALS.macro}s`);
+  // FRED signal check — daily (compares latest vs previous release)
+  setInterval(() => {
+    checkFredSignals().catch(err => console.warn('[Scheduler] FRED signal check failed:', err.message));
+  }, INTERVALS.fredSignals * 1000);
+
+  // GDELT keyword volume check — every 30 minutes
+  setInterval(() => {
+    checkGdeltSignals().catch(err => console.warn('[Scheduler] GDELT check failed:', err.message));
+  }, INTERVALS.gdeltSignals * 1000);
+
+  console.log(`[Scheduler] Started — prices ${INTERVALS.prices}s, news ${INTERVALS.news}s, macro ${INTERVALS.macro}s, fred-signals ${INTERVALS.fredSignals}s, gdelt ${INTERVALS.gdeltSignals}s`);
 }

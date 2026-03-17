@@ -198,7 +198,7 @@ export default function Dashboard() {
           <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider">Signal Inbox</h2>
-              <Link to="/signals" className="text-xs text-cyan-400 hover:text-cyan-300">View All</Link>
+              <Link to="/" className="text-xs text-cyan-400 hover:text-cyan-300">View All</Link>
             </div>
             {inboxSignals.length === 0 ? (
               <p className="text-xs text-slate-600 py-4 text-center">Inbox empty.</p>

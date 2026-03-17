@@ -38,7 +38,9 @@ initDb();
 
 // Run migrations
 import { migrateScoringV2 } from './db/migrate-scoring-v2.js';
+import { migrateSourceTypes } from './db/migrate-source-types.js';
 migrateScoringV2();
+migrateSourceTypes();
 console.log('[Server] Database ready.');
 
 // Auto-seed if database is empty (first run)

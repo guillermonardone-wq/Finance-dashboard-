@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS signals (
   raw_source TEXT,               -- original text/link
   source_type TEXT NOT NULL CHECK (source_type IN (
     'manual', 'news_feed', 'market_data', 'social', 'government',
-    'satellite', 'shipping', 'analyst', 'other'
+    'satellite', 'shipping', 'analyst', 'fred', 'gdelt', 'other'
   )),
   source_provider TEXT,          -- which data provider surfaced this
   source_url TEXT,

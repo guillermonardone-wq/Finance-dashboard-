@@ -1,11 +1,11 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
 const PRIMARY_NAV = [
-  { to: '/',           label: 'Thesis Hub',        icon: '◉' },
+  { to: '/',           label: 'Signal Inbox',      icon: '⚡' },
   { to: '/thesis/new', label: 'Quick Capture',     icon: '+' },
   { to: '/theses',     label: 'Theses',            icon: '◈' },
-  { to: '/signals',    label: 'Signals',           icon: '⚡' },
   { to: '/market',     label: 'Market Context',    icon: '◆' },
+  { to: '/dashboard',  label: 'Thesis Hub',        icon: '◉' },
 ];
 
 const SECONDARY_NAV = [
