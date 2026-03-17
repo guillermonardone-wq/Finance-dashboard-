@@ -166,7 +166,7 @@ export function matchPatterns(cluster) {
 }
 
 // Async version for when we can await
-export async function matchPatternsAsync(cluster) {
+export async function matchPatternsAsync(cluster, { userId = "default" } = {}) {
   const clusterCategories = new Set(cluster.categories || []);
   const matches = [];
 
@@ -180,7 +180,7 @@ export async function matchPatternsAsync(cluster) {
   // Check against DB playbook entries
   try {
     const knex = getKnex();
-    const playbooks = await knex("playbook_entries").where("status", "active");
+    const playbooks = await knex("playbook_entries").where("status", "active").where("user_id", userId);
     for (const pb of playbooks) {
       const triggers = pb.trigger_conditions || [];
       const assets = pb.typical_assets || [];

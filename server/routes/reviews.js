@@ -7,8 +7,9 @@ const router = Router();
 // GET all reviews
 router.get("/", async (req, res) => {
   const knex = getKnex();
+  const userId = req.userId || "default";
   const { thesis_id } = req.query;
-  let query = knex("reviews");
+  let query = knex("reviews").where("user_id", userId);
   if (thesis_id) query = query.where("thesis_id", thesis_id);
   const rows = await query.orderBy("created_at", "desc");
   res.json(rows);
@@ -17,7 +18,8 @@ router.get("/", async (req, res) => {
 // GET single review
 router.get("/:id", async (req, res) => {
   const knex = getKnex();
-  const row = await knex("reviews").where("id", req.params.id).first();
+  const userId = req.userId || "default";
+  const row = await knex("reviews").where("id", req.params.id).where("user_id", userId).first();
   if (!row) return res.status(404).json({ error: "Review not found" });
   res.json(row);
 });
@@ -43,8 +45,10 @@ router.post("/", async (req, res) => {
     });
   }
 
+  const userId = req.userId || "default";
   await knex("reviews").insert({
     id,
+    user_id: userId,
     thesis_id: r.thesis_id,
     trade_id: r.trade_id || null,
     created_at: now,

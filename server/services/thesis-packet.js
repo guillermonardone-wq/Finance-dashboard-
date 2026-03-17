@@ -13,6 +13,7 @@ export async function buildThesisPacket(thesisId, options = {}) {
     includeMarketObs = true,
     includePredictionMarkets = true,
     includePlaybook = true,
+    userId = "default",
   } = options;
 
   // --- Core thesis ---
@@ -147,7 +148,8 @@ export async function buildThesisPacket(thesisId, options = {}) {
   if (includePlaybook) {
     const entries = await knex("playbook_entries")
       .select("id", "title", "category", "pattern_description", "trigger_conditions", "typical_assets", "success_rate_estimate")
-      .where("status", "active");
+      .where("status", "active")
+      .where("user_id", userId);
 
     const thesisWords = new Set(
       `${thesis.title} ${thesis.thesis_statement}`

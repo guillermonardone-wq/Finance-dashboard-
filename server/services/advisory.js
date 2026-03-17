@@ -240,7 +240,7 @@ export async function runAdvisoryEvaluation(thesisId, options = {}) {
     );
 
   console.log(`[Advisory] Building thesis packet for ${thesisId}...`);
-  const packet = await buildThesisPacket(thesisId);
+  const packet = await buildThesisPacket(thesisId, { userId: options.userId || "default" });
   const userPrompt = buildUserPrompt(packet);
 
   const assessmentId = uuidv4();
