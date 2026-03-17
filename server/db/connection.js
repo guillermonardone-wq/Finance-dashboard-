@@ -27,10 +27,31 @@ export function getKnex() {
 }
 
 /**
+ * Wait for PostgreSQL to accept connections (retries with backoff).
+ */
+async function waitForDb(knex, retries = 5, delayMs = 2000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await knex.raw("SELECT 1");
+      return;
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      console.log(
+        `[DB] Connection attempt ${i + 1}/${retries} failed, retrying in ${delayMs}ms...`,
+      );
+      await new Promise((r) => setTimeout(r, delayMs));
+      delayMs *= 2;
+    }
+  }
+}
+
+/**
  * Run pending Knex migrations on startup.
+ * Waits for DB to be reachable first.
  */
 export async function initDb() {
   const knex = getKnex();
+  await waitForDb(knex);
   await knex.migrate.latest({
     directory: "./server/db/migrations",
   });

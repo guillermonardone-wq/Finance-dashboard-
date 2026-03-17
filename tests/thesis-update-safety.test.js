@@ -27,8 +27,10 @@ let dbAvailable = false;
 
 beforeAll(async () => {
   try {
-    await initDb();
+    // Quick connectivity check — fail fast if no DB
     const knex = getKnex();
+    await knex.raw("SELECT 1");
+    await initDb();
     await knex("theses").where("id", "like", "update-safety-%").del();
     dbAvailable = true;
   } catch {
