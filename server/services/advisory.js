@@ -1,23 +1,9 @@
 // ============================================================
 // LLM ADVISORY SERVICE — Provider-agnostic thesis evaluation
 // ============================================================
-// Supports Anthropic (Claude) and OpenAI as LLM providers.
-// The service:
-//   1. Builds a thesis packet (full context)
-//   2. Sends it to the configured LLM
-//   3. Parses the structured JSON response
-//   4. Computes comparison against deterministic scores
-//   5. Persists the assessment
-//
-// SAFEGUARDS:
-//   - Cannot set trade state
-//   - Cannot override gates
-//   - Cannot modify thesis scores
-//   - Output is strictly advisory and labeled as such
-// ============================================================
 
 import { v4 as uuidv4 } from "uuid";
-import { getDb } from "../db/connection.js";
+import { getKnex } from "../db/connection.js";
 import { buildThesisPacket } from "./thesis-packet.js";
 import {
   ADVISORY_SYSTEM_PROMPT,
@@ -111,7 +97,6 @@ const PROVIDERS = {
 // --- RESPONSE PARSING ---
 
 function parseAdvisoryResponse(content) {
-  // Strip markdown code fences if present
   let cleaned = content.trim();
   if (cleaned.startsWith("```")) {
     cleaned = cleaned.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
@@ -119,7 +104,6 @@ function parseAdvisoryResponse(content) {
 
   const parsed = JSON.parse(cleaned);
 
-  // Validate required fields
   const required = [
     "evidence_strength",
     "signal_independence",
@@ -143,7 +127,6 @@ function parseAdvisoryResponse(content) {
     }
   }
 
-  // Clamp scores to valid ranges
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
   parsed.evidence_strength = clamp(parsed.evidence_strength, 0, 10);
   parsed.signal_independence = clamp(parsed.signal_independence, 0, 10);
@@ -154,7 +137,6 @@ function parseAdvisoryResponse(content) {
   parsed.overall_score = clamp(parsed.overall_score, 0, 100);
   parsed.confidence_level = clamp(parsed.confidence_level, 0, 1);
 
-  // Ensure arrays
   if (!Array.isArray(parsed.hidden_assumptions)) parsed.hidden_assumptions = [];
   if (!Array.isArray(parsed.key_missing_information))
     parsed.key_missing_information = [];
@@ -167,10 +149,6 @@ function parseAdvisoryResponse(content) {
 
 // --- COMPARISON LOGIC ---
 
-/**
- * Compare LLM assessment against deterministic engine scores.
- * Returns structured disagreement analysis.
- */
 function computeComparison(llmScores, deterministicScores) {
   const detComposite = deterministicScores.composite_score;
   const llmComposite = llmScores.overall_score;
@@ -186,7 +164,6 @@ function computeComparison(llmScores, deterministicScores) {
   const delta = Math.round((llmComposite - detComposite) * 100) / 100;
   const absDelta = Math.abs(delta);
 
-  // Dimension-level comparison
   const dimensionMap = {
     evidence_strength: "evidence_layer",
     signal_independence: "signal_independence",
@@ -250,15 +227,8 @@ function computeComparison(llmScores, deterministicScores) {
 
 // --- MAIN EVALUATION FUNCTION ---
 
-/**
- * Run a full LLM advisory evaluation for a thesis.
- *
- * @param {string} thesisId
- * @param {Object} options - { provider, model }
- * @returns {Object} - the stored assessment record
- */
 export async function runAdvisoryEvaluation(thesisId, options = {}) {
-  const db = getDb();
+  const knex = getKnex();
   const provider = options.provider || process.env.LLM_PROVIDER || "anthropic";
   const model = options.model || process.env.LLM_MODEL || undefined;
 
@@ -268,103 +238,76 @@ export async function runAdvisoryEvaluation(thesisId, options = {}) {
       `Unsupported LLM provider: ${provider}. Supported: ${Object.keys(PROVIDERS).join(", ")}`,
     );
 
-  // Step 1: Build thesis packet
   console.log(`[Advisory] Building thesis packet for ${thesisId}...`);
-  const packet = buildThesisPacket(thesisId);
+  const packet = await buildThesisPacket(thesisId);
   const userPrompt = buildUserPrompt(packet);
 
-  // Step 2: Create pending assessment record
   const assessmentId = uuidv4();
-  db.prepare(
-    `
-    INSERT INTO llm_thesis_assessments (id, thesis_id, model_provider, model_name, prompt_version, thesis_packet_json, raw_response_json, status)
-    VALUES (?, ?, ?, ?, ?, ?, '{}', 'running')
-  `,
-  ).run(
-    assessmentId,
-    thesisId,
-    provider,
-    model || "default",
-    PROMPT_VERSION,
-    JSON.stringify(packet),
-  );
+  await knex("llm_thesis_assessments").insert({
+    id: assessmentId,
+    thesis_id: thesisId,
+    model_provider: provider,
+    model_name: model || "default",
+    prompt_version: PROMPT_VERSION,
+    thesis_packet_json: packet,
+    raw_response_json: {},
+    status: "running",
+  });
 
   try {
-    // Step 3: Call LLM
     console.log(
       `[Advisory] Calling ${provider} (model: ${model || "default"})...`,
     );
     const llmResult = await callLLM(ADVISORY_SYSTEM_PROMPT, userPrompt, model);
 
-    // Step 4: Parse response
     console.log(
       `[Advisory] Parsing response (${llmResult.latencyMs}ms, ${llmResult.completionTokens} tokens)...`,
     );
     const assessment = parseAdvisoryResponse(llmResult.content);
 
-    // Step 5: Compute comparison
     const comparison = computeComparison(
       assessment,
       packet.deterministic_scores,
     );
 
-    // Step 6: Persist
-    db.prepare(
-      `
-      UPDATE llm_thesis_assessments SET
-        model_name = ?,
-        score_evidence_strength = ?, score_signal_independence = ?,
-        score_structural_logic = ?, score_timing_clarity = ?,
-        score_market_edge = ?, score_counter_case_robustness = ?,
-        overall_score = ?, confidence_level = ?,
-        strongest_counter_case = ?, hidden_assumptions = ?,
-        key_missing_information = ?, top_supporting_signals = ?,
-        top_concerns = ?, recommendation = ?,
-        deterministic_score = ?, score_delta = ?, disagreement_summary = ?,
-        raw_response_json = ?, prompt_tokens = ?, completion_tokens = ?, latency_ms = ?,
-        status = 'completed'
-      WHERE id = ?
-    `,
-    ).run(
-      model || "default",
-      assessment.evidence_strength,
-      assessment.signal_independence,
-      assessment.structural_logic,
-      assessment.timing_clarity,
-      assessment.market_edge,
-      assessment.counter_case_robustness,
-      assessment.overall_score,
-      assessment.confidence_level,
-      assessment.strongest_counter_case,
-      JSON.stringify(assessment.hidden_assumptions),
-      JSON.stringify(assessment.key_missing_information),
-      JSON.stringify(assessment.top_supporting_signals),
-      JSON.stringify(assessment.top_concerns),
-      assessment.recommendation,
-      packet.deterministic_scores.composite_score,
-      comparison.delta,
-      comparison.summary,
-      JSON.stringify(llmResult.raw),
-      llmResult.promptTokens,
-      llmResult.completionTokens,
-      llmResult.latencyMs,
-      assessmentId,
-    );
+    await knex("llm_thesis_assessments")
+      .where("id", assessmentId)
+      .update({
+        model_name: model || "default",
+        score_evidence_strength: assessment.evidence_strength,
+        score_signal_independence: assessment.signal_independence,
+        score_structural_logic: assessment.structural_logic,
+        score_timing_clarity: assessment.timing_clarity,
+        score_market_edge: assessment.market_edge,
+        score_counter_case_robustness: assessment.counter_case_robustness,
+        overall_score: assessment.overall_score,
+        confidence_level: assessment.confidence_level,
+        strongest_counter_case: assessment.strongest_counter_case,
+        hidden_assumptions: assessment.hidden_assumptions,
+        key_missing_information: assessment.key_missing_information,
+        top_supporting_signals: assessment.top_supporting_signals,
+        top_concerns: assessment.top_concerns,
+        recommendation: assessment.recommendation,
+        deterministic_score: packet.deterministic_scores.composite_score,
+        score_delta: comparison.delta,
+        disagreement_summary: comparison.summary,
+        raw_response_json: llmResult.raw,
+        prompt_tokens: llmResult.promptTokens,
+        completion_tokens: llmResult.completionTokens,
+        latency_ms: llmResult.latencyMs,
+        status: "completed",
+      });
 
     console.log(
       `[Advisory] Assessment ${assessmentId} completed. LLM: ${assessment.overall_score}/100, Det: ${packet.deterministic_scores.composite_score ?? "—"}, Delta: ${comparison.delta ?? "—"}`,
     );
 
-    // Return the full record
-    const stored = db
-      .prepare("SELECT * FROM llm_thesis_assessments WHERE id = ?")
-      .get(assessmentId);
-    return parseAssessmentRow(stored);
+    const stored = await knex("llm_thesis_assessments").where("id", assessmentId).first();
+    return stored;
   } catch (err) {
-    // Mark as failed
-    db.prepare(
-      "UPDATE llm_thesis_assessments SET status = 'failed', error_message = ? WHERE id = ?",
-    ).run(err.message, assessmentId);
+    await knex("llm_thesis_assessments")
+      .where("id", assessmentId)
+      .update({ status: "failed", error_message: err.message });
 
     console.error(
       `[Advisory] Assessment ${assessmentId} FAILED: ${err.message}`,
@@ -373,51 +316,17 @@ export async function runAdvisoryEvaluation(thesisId, options = {}) {
   }
 }
 
-/**
- * Get the latest advisory assessment for a thesis.
- */
-export function getLatestAssessment(thesisId) {
-  const db = getDb();
-  const row = db
-    .prepare(
-      "SELECT * FROM llm_thesis_assessments WHERE thesis_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
-    )
-    .get(thesisId);
-  return row ? parseAssessmentRow(row) : null;
+export async function getLatestAssessment(thesisId) {
+  const knex = getKnex();
+  return knex("llm_thesis_assessments")
+    .where({ thesis_id: thesisId, status: "completed" })
+    .orderBy("created_at", "desc")
+    .first() || null;
 }
 
-/**
- * Get all advisory assessments for a thesis (history).
- */
-export function getAssessmentHistory(thesisId) {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      "SELECT * FROM llm_thesis_assessments WHERE thesis_id = ? ORDER BY created_at DESC",
-    )
-    .all(thesisId);
-  return rows.map(parseAssessmentRow);
-}
-
-function parseAssessmentRow(row) {
-  if (!row) return null;
-  const jsonFields = [
-    "hidden_assumptions",
-    "key_missing_information",
-    "top_supporting_signals",
-    "top_concerns",
-    "thesis_packet_json",
-    "raw_response_json",
-  ];
-  const parsed = { ...row };
-  for (const field of jsonFields) {
-    if (parsed[field] && typeof parsed[field] === "string") {
-      try {
-        parsed[field] = JSON.parse(parsed[field]);
-      } catch {
-        /* leave as string */
-      }
-    }
-  }
-  return parsed;
+export async function getAssessmentHistory(thesisId) {
+  const knex = getKnex();
+  return knex("llm_thesis_assessments")
+    .where("thesis_id", thesisId)
+    .orderBy("created_at", "desc");
 }

@@ -1,13 +1,11 @@
 // ============================================================
 // SCHEDULER — Background data fetching from live providers
 // ============================================================
-// Runs on startup and at intervals to keep market data fresh.
-// Converts live news into signals and triggers bot scans.
 
 import { v4 as uuidv4 } from "uuid";
 import { ingestion } from "./ingestion.js";
 import { registry } from "../providers/registry.js";
-import { getDb } from "../db/connection.js";
+import { getKnex } from "../db/connection.js";
 import { checkFredSignals } from "./fred-signals.js";
 import { checkGdeltSignals } from "./gdelt-signals.js";
 
@@ -24,8 +22,8 @@ const INTERVALS = {
   prices: parseInt(process.env.REFRESH_INTERVAL_PRICES) || 300,
   news: parseInt(process.env.REFRESH_INTERVAL_NEWS) || 900,
   macro: parseInt(process.env.REFRESH_INTERVAL_MACRO) || 3600,
-  fredSignals: parseInt(process.env.REFRESH_INTERVAL_FRED_SIGNALS) || 86400, // daily
-  gdeltSignals: parseInt(process.env.REFRESH_INTERVAL_GDELT_SIGNALS) || 1800, // 30 minutes
+  fredSignals: parseInt(process.env.REFRESH_INTERVAL_FRED_SIGNALS) || 86400,
+  gdeltSignals: parseInt(process.env.REFRESH_INTERVAL_GDELT_SIGNALS) || 1800,
 };
 
 // Map news keywords to signal categories
@@ -57,52 +55,42 @@ function categorizeNews(title, description) {
 }
 
 // Convert a live news article into a signal in the signals table
-function newsToSignal(article, provider) {
-  const db = getDb();
+async function newsToSignal(article, provider) {
+  const knex = getKnex();
   const title = article.title || article.headline || "";
   const description =
     article.description || article.content || article.summary || "";
 
   // Skip if we already have a signal with same title (dedup)
-  const existing = db
-    .prepare("SELECT id FROM signals WHERE title = ?")
-    .get(title);
+  const existing = await knex("signals").where("title", title).first();
   if (existing) return null;
 
   const id = uuidv4();
   const now = new Date().toISOString();
   const category = categorizeNews(title, description);
 
-  db.prepare(
-    `
-    INSERT INTO signals (
-      id, created_at, updated_at, category, subcategory,
-      title, description, raw_source, source_type, source_provider,
-      source_url, source_attribution, novelty, reliability, signal_strength,
-      thesis_id, related_signal_ids, status, tags
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `,
-  ).run(
+  await knex("signals").insert({
     id,
-    now,
-    now,
+    user_id: "default",
+    created_at: now,
+    updated_at: now,
     category,
-    null,
+    subcategory: null,
     title,
-    description.slice(0, 500),
-    null,
-    "news_feed",
-    provider,
-    article.url || null,
-    article.source || provider,
-    "new",
-    "likely",
-    0.5,
-    null,
-    JSON.stringify([]),
-    "inbox",
-    JSON.stringify([]),
-  );
+    description: description.slice(0, 500),
+    raw_source: null,
+    source_type: "news_feed",
+    source_provider: provider,
+    source_url: article.url || null,
+    source_attribution: article.source || provider,
+    novelty: "new",
+    reliability: "likely",
+    signal_strength: 0.5,
+    thesis_id: null,
+    related_signal_ids: [],
+    status: "inbox",
+    tags: [],
+  });
 
   return id;
 }
@@ -110,14 +98,10 @@ function newsToSignal(article, provider) {
 // Extract articles array from potentially nested response
 function extractArticles(result) {
   if (!result) return [];
-  // Direct array
   if (Array.isArray(result)) return result;
-  // { data: [...] }
   if (Array.isArray(result.data)) return result.data;
-  // { data: { data: [...] } } (cache-wrapped)
   if (result.data?.data && Array.isArray(result.data.data))
     return result.data.data;
-  // { data: { success, data: [...] } }
   if (result.data?.success && Array.isArray(result.data?.data))
     return result.data.data;
   return [];
@@ -146,21 +130,19 @@ async function fetchNews() {
 
     let newSignalCount = 0;
 
-    // Fetch from each query
     for (const q of NEWS_QUERIES) {
       const result = await ingestion.fetchNews(q);
       const articles = extractArticles(result);
       for (const article of articles.slice(0, 5)) {
-        const signalId = newsToSignal(article, extractProvider(result));
+        const signalId = await newsToSignal(article, extractProvider(result));
         if (signalId) newSignalCount++;
       }
     }
 
-    // Fetch headlines
     const headlines = await ingestion.fetchHeadlines("business");
     const headlineArticles = extractArticles(headlines);
     for (const article of headlineArticles.slice(0, 5)) {
-      const signalId = newsToSignal(article, extractProvider(headlines));
+      const signalId = await newsToSignal(article, extractProvider(headlines));
       if (signalId) newSignalCount++;
     }
 
@@ -188,38 +170,32 @@ async function fetchMacro() {
 }
 
 export async function startScheduler() {
-  // Initial fetch after a short delay to let providers finish initializing
   setTimeout(async () => {
     console.log("[Scheduler] Running initial data fetch...");
     await Promise.allSettled([fetchPrices(), fetchNews(), fetchMacro()]);
     console.log("[Scheduler] Initial fetch complete.");
 
-    // Run FRED signal check shortly after macro data is fetched
     console.log("[Scheduler] Running initial FRED signal check...");
     await checkFredSignals().catch((err) =>
       console.warn("[Scheduler] FRED signal check failed:", err.message),
     );
 
-    // Run initial GDELT check
     console.log("[Scheduler] Running initial GDELT check...");
     await checkGdeltSignals().catch((err) =>
       console.warn("[Scheduler] GDELT check failed:", err.message),
     );
   }, 3000);
 
-  // Schedule recurring fetches
   setInterval(fetchPrices, INTERVALS.prices * 1000);
   setInterval(fetchNews, INTERVALS.news * 1000);
   setInterval(fetchMacro, INTERVALS.macro * 1000);
 
-  // FRED signal check — daily (compares latest vs previous release)
   setInterval(() => {
     checkFredSignals().catch((err) =>
       console.warn("[Scheduler] FRED signal check failed:", err.message),
     );
   }, INTERVALS.fredSignals * 1000);
 
-  // GDELT keyword volume check — every 30 minutes
   setInterval(() => {
     checkGdeltSignals().catch((err) =>
       console.warn("[Scheduler] GDELT check failed:", err.message),

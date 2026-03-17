@@ -1,152 +1,99 @@
 // ============================================================
-// SIGNAL REPOSITORY — DB access layer for signals
+// SIGNAL REPOSITORY — Knex-based DB access layer for signals
 // ============================================================
 
-import { getDb } from "./connection.js";
+import { getKnex, userScoped } from "./connection.js";
 
-const JSON_PARSE_FIELDS = ["related_signal_ids", "tags"];
-
-function parseJson(row) {
-  if (!row) return row;
-  const parsed = { ...row };
-  for (const f of JSON_PARSE_FIELDS) {
-    if (parsed[f] && typeof parsed[f] === "string") {
-      try {
-        parsed[f] = JSON.parse(parsed[f]);
-      } catch {}
-    }
-  }
-  return parsed;
+export async function findAll({ status, category, thesis_id } = {}, userId = "default") {
+  const knex = getKnex();
+  let query = knex("signals").where(userScoped(userId));
+  if (status) query = query.where("status", status);
+  if (category) query = query.where("category", category);
+  if (thesis_id) query = query.where("thesis_id", thesis_id);
+  return query.orderBy("created_at", "desc");
 }
 
-export function findAll({ status, category, thesis_id } = {}) {
-  const db = getDb();
-  let sql = "SELECT * FROM signals WHERE 1=1";
-  const params = [];
-  if (status) {
-    sql += " AND status = ?";
-    params.push(status);
-  }
-  if (category) {
-    sql += " AND category = ?";
-    params.push(category);
-  }
-  if (thesis_id) {
-    sql += " AND thesis_id = ?";
-    params.push(thesis_id);
-  }
-  sql += " ORDER BY created_at DESC";
-  return db
-    .prepare(sql)
-    .all(...params)
-    .map(parseJson);
+export async function findById(id, userId = "default") {
+  const knex = getKnex();
+  return knex("signals").where({ id, ...userScoped(userId) }).first() || null;
 }
 
-export function findById(id) {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM signals WHERE id = ?").get(id);
-  return row ? parseJson(row) : null;
-}
-
-export function countsByStatus() {
-  const db = getDb();
-  const rows = db
-    .prepare("SELECT status, COUNT(*) as count FROM signals GROUP BY status")
-    .all();
+export async function countsByStatus(userId = "default") {
+  const knex = getKnex();
+  const rows = await knex("signals")
+    .where(userScoped(userId))
+    .groupBy("status")
+    .select("status")
+    .count("* as count");
   const counts = {};
-  for (const row of rows) counts[row.status] = row.count;
+  for (const row of rows) counts[row.status] = parseInt(row.count);
   return counts;
 }
 
-export function create(id, data) {
-  const db = getDb();
+export async function create(id, data, userId = "default") {
+  const knex = getKnex();
   const now = new Date().toISOString();
   const s = data;
 
-  db.prepare(
-    `
-    INSERT INTO signals (
-      id, created_at, updated_at, category, subcategory,
-      title, description, raw_source, source_type, source_provider,
-      source_url, source_attribution, novelty, reliability, signal_strength,
-      thesis_id, related_signal_ids, status, tags
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `,
-  ).run(
+  const row = {
     id,
-    now,
-    now,
-    s.category.trim(),
-    s.subcategory || null,
-    s.title.trim(),
-    s.description.trim(),
-    s.raw_source || null,
-    s.source_type || "manual",
-    s.source_provider || null,
-    s.source_url || null,
-    s.source_attribution || "Manual entry",
-    s.novelty || "unknown",
-    s.reliability || "unverified",
-    s.signal_strength != null ? s.signal_strength : null,
-    s.thesis_id || null,
-    JSON.stringify(s.related_signal_ids || []),
-    s.status || "inbox",
-    JSON.stringify(s.tags || []),
-  );
+    user_id: userId,
+    created_at: now,
+    updated_at: now,
+    category: s.category.trim(),
+    subcategory: s.subcategory || null,
+    title: s.title.trim(),
+    description: s.description.trim(),
+    raw_source: s.raw_source || null,
+    source_type: s.source_type || "manual",
+    source_provider: s.source_provider || null,
+    source_url: s.source_url || null,
+    source_attribution: s.source_attribution || "Manual entry",
+    novelty: s.novelty || "unknown",
+    reliability: s.reliability || "unverified",
+    signal_strength: s.signal_strength != null ? s.signal_strength : null,
+    thesis_id: s.thesis_id || null,
+    related_signal_ids: s.related_signal_ids || [],
+    status: s.status || "inbox",
+    tags: s.tags || [],
+  };
 
-  return findById(id);
+  await knex("signals").insert(row);
+  return findById(id, userId);
 }
 
-export function update(id, data) {
-  const db = getDb();
-  const existing = db.prepare("SELECT * FROM signals WHERE id = ?").get(id);
+export async function update(id, data, userId = "default") {
+  const knex = getKnex();
+  const existing = await knex("signals").where({ id, ...userScoped(userId) }).first();
   if (!existing) return null;
 
-  const s = data;
   const now = new Date().toISOString();
-  const hasExplicitThesisId = "thesis_id" in s;
+  const s = data;
 
-  db.prepare(
-    `
-    UPDATE signals SET
-      updated_at = ?, category = COALESCE(?, category), subcategory = COALESCE(?, subcategory),
-      title = COALESCE(?, title), description = COALESCE(?, description),
-      raw_source = COALESCE(?, raw_source), source_type = COALESCE(?, source_type),
-      source_provider = COALESCE(?, source_provider), source_url = COALESCE(?, source_url),
-      source_attribution = COALESCE(?, source_attribution),
-      novelty = COALESCE(?, novelty), reliability = COALESCE(?, reliability),
-      signal_strength = COALESCE(?, signal_strength),
-      thesis_id = ${hasExplicitThesisId ? "?" : "thesis_id"},
-      related_signal_ids = COALESCE(?, related_signal_ids),
-      status = COALESCE(?, status),
-      tags = COALESCE(?, tags)
-    WHERE id = ?
-  `,
-  ).run(
-    now,
-    s.category,
-    s.subcategory,
-    s.title,
-    s.description,
-    s.raw_source,
-    s.source_type,
-    s.source_provider,
-    s.source_url,
-    s.source_attribution,
-    s.novelty,
-    s.reliability,
-    s.signal_strength,
-    ...(hasExplicitThesisId ? [s.thesis_id] : []),
-    s.related_signal_ids ? JSON.stringify(s.related_signal_ids) : null,
-    s.status,
-    s.tags ? JSON.stringify(s.tags) : null,
-    id,
-  );
+  const updates = { updated_at: now };
 
-  return findById(id);
+  if (s.category != null) updates.category = s.category;
+  if (s.subcategory !== undefined) updates.subcategory = s.subcategory;
+  if (s.title != null) updates.title = s.title;
+  if (s.description != null) updates.description = s.description;
+  if (s.raw_source !== undefined) updates.raw_source = s.raw_source;
+  if (s.source_type != null) updates.source_type = s.source_type;
+  if (s.source_provider !== undefined) updates.source_provider = s.source_provider;
+  if (s.source_url !== undefined) updates.source_url = s.source_url;
+  if (s.source_attribution !== undefined) updates.source_attribution = s.source_attribution;
+  if (s.novelty != null) updates.novelty = s.novelty;
+  if (s.reliability != null) updates.reliability = s.reliability;
+  if (s.signal_strength !== undefined) updates.signal_strength = s.signal_strength;
+  if ("thesis_id" in s) updates.thesis_id = s.thesis_id;
+  if (s.related_signal_ids !== undefined) updates.related_signal_ids = s.related_signal_ids;
+  if (s.status != null) updates.status = s.status;
+  if (s.tags !== undefined) updates.tags = s.tags;
+
+  await knex("signals").where({ id }).update(updates);
+  return findById(id, userId);
 }
 
-export function remove(id) {
-  const db = getDb();
-  db.prepare("DELETE FROM signals WHERE id = ?").run(id);
+export async function remove(id, userId = "default") {
+  const knex = getKnex();
+  await knex("signals").where({ id, ...userScoped(userId) }).del();
 }

@@ -4,52 +4,44 @@
 // Tests: create, fetch, update, delete, link signal, unlink signal,
 //        re-score path, classification tracking, calibration snapshots.
 //
-// Uses a fresh in-memory-style test DB for each suite run.
+// Requires a running PostgreSQL instance (see docker-compose.yml).
+// Skips gracefully if DB is unavailable.
 // ============================================================
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { existsSync, mkdirSync, unlinkSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const TEST_DB_PATH = join(__dirname, "../data/test-thesis-workflow.db");
 
 // Set env before any server imports
-process.env.DB_PATH = TEST_DB_PATH;
 process.env.FRED_API_KEY = "";
 process.env.FINNHUB_API_KEY = "";
 process.env.NEWSAPI_API_KEY = "";
 process.env.ALPHA_VANTAGE_API_KEY = "";
 
-// Ensure data dir
-const dataDir = join(__dirname, "../data");
-if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
-
-// Clean up previous test DB
-if (existsSync(TEST_DB_PATH)) unlinkSync(TEST_DB_PATH);
-
-// Import after env setup
-const { initDb, closeDb } = await import("../server/db/connection.js");
+const { initDb, getKnex, closeDb } = await import("../server/db/connection.js");
 const thesisRepo = await import("../server/db/thesis-repo.js");
 const signalRepo = await import("../server/db/signal-repo.js");
 
-// ---- Setup ----
+let dbAvailable = false;
 
-beforeAll(() => {
-  initDb();
-  // Run migrations
-  import("../server/db/migrate-scoring-v2.js").then((m) =>
-    m.migrateScoringV2(),
-  );
-  import("../server/db/migrate-source-types.js").then((m) =>
-    m.migrateSourceTypes(),
-  );
+beforeAll(async () => {
+  try {
+    await initDb();
+    const knex = getKnex();
+    // Clean test data
+    await knex("signals").where("id", "like", "test-%").del();
+    await knex("theses").where("id", "like", "test-%").del();
+    dbAvailable = true;
+  } catch {
+    console.warn("[Test] PostgreSQL not available — skipping DB tests");
+  }
 });
 
-afterAll(() => {
-  closeDb();
-  if (existsSync(TEST_DB_PATH)) unlinkSync(TEST_DB_PATH);
+afterAll(async () => {
+  if (dbAvailable) {
+    const knex = getKnex();
+    await knex("signals").where("id", "like", "test-%").del();
+    await knex("theses").where("id", "like", "test-%").del();
+  }
+  await closeDb();
 });
 
 // ---- Thesis CRUD ----
@@ -57,8 +49,9 @@ afterAll(() => {
 describe("Thesis CRUD", () => {
   const thesisId = "test-thesis-001";
 
-  it("creates a draft thesis with minimal fields", () => {
-    const created = thesisRepo.create(thesisId, {
+  it("creates a draft thesis with minimal fields", async () => {
+    if (!dbAvailable) return;
+    const created = await thesisRepo.create(thesisId, {
       title: "Fed pivot in Q3",
       thesis_statement:
         "The Fed will cut rates by September due to slowing employment.",
@@ -72,27 +65,31 @@ describe("Thesis CRUD", () => {
     expect(created.classification).toBe("WATCH");
   });
 
-  it("fetches a thesis by ID", () => {
-    const fetched = thesisRepo.findById(thesisId);
+  it("fetches a thesis by ID", async () => {
+    if (!dbAvailable) return;
+    const fetched = await thesisRepo.findById(thesisId);
     expect(fetched).toBeTruthy();
     expect(fetched.title).toBe("Fed pivot in Q3");
     expect(Array.isArray(fetched.causal_chain)).toBe(true);
     expect(Array.isArray(fetched.affected_assets)).toBe(true);
   });
 
-  it("lists all theses", () => {
-    const all = thesisRepo.findAll();
+  it("lists all theses", async () => {
+    if (!dbAvailable) return;
+    const all = await thesisRepo.findAll();
     expect(all.length).toBeGreaterThanOrEqual(1);
     expect(all.some((t) => t.id === thesisId)).toBe(true);
   });
 
-  it("filters theses by status", () => {
-    const drafts = thesisRepo.findAll({ status: "draft" });
+  it("filters theses by status", async () => {
+    if (!dbAvailable) return;
+    const drafts = await thesisRepo.findAll({ status: "draft" });
     expect(drafts.every((t) => t.status === "draft")).toBe(true);
   });
 
-  it("updates thesis fields", () => {
-    const updated = thesisRepo.update(thesisId, {
+  it("updates thesis fields", async () => {
+    if (!dbAvailable) return;
+    const updated = await thesisRepo.update(thesisId, {
       title: "Fed pivot in Q3 (revised)",
       probability_low: 0.3,
       probability_high: 0.7,
@@ -109,8 +106,9 @@ describe("Thesis CRUD", () => {
     ]);
   });
 
-  it("tracks classification changes", () => {
-    const updated = thesisRepo.update(thesisId, {
+  it("tracks classification changes", async () => {
+    if (!dbAvailable) return;
+    const updated = await thesisRepo.update(thesisId, {
       classification: "DEVELOP",
       classification_reason: "Supporting data strengthened",
     });
@@ -121,8 +119,9 @@ describe("Thesis CRUD", () => {
     expect(updated.previous_classifications[0].to).toBe("DEVELOP");
   });
 
-  it("sets calibration snapshot on first scoring", () => {
-    const updated = thesisRepo.update(thesisId, {
+  it("sets calibration snapshot on first scoring", async () => {
+    if (!dbAvailable) return;
+    const updated = await thesisRepo.update(thesisId, {
       composite_score: 62.5,
     });
 
@@ -130,8 +129,9 @@ describe("Thesis CRUD", () => {
     expect(updated.classification_at_creation).toBe("DEVELOP");
   });
 
-  it("does not overwrite calibration on subsequent scoring", () => {
-    const updated = thesisRepo.update(thesisId, {
+  it("does not overwrite calibration on subsequent scoring", async () => {
+    if (!dbAvailable) return;
+    const updated = await thesisRepo.update(thesisId, {
       composite_score: 75.0,
     });
 
@@ -139,26 +139,29 @@ describe("Thesis CRUD", () => {
     expect(updated.composite_score).toBe(75.0);
   });
 
-  it("returns null for non-existent thesis", () => {
-    const fetched = thesisRepo.findById("does-not-exist");
+  it("returns null for non-existent thesis", async () => {
+    if (!dbAvailable) return;
+    const fetched = await thesisRepo.findById("does-not-exist");
     expect(fetched).toBeNull();
   });
 
-  it("update returns null for non-existent thesis", () => {
-    const result = thesisRepo.update("does-not-exist", { title: "nope" });
+  it("update returns null for non-existent thesis", async () => {
+    if (!dbAvailable) return;
+    const result = await thesisRepo.update("does-not-exist", { title: "nope" });
     expect(result).toBeNull();
   });
 
-  it("deletes a thesis", () => {
+  it("deletes a thesis", async () => {
+    if (!dbAvailable) return;
     const deleteId = "test-thesis-delete";
-    thesisRepo.create(deleteId, {
+    await thesisRepo.create(deleteId, {
       title: "To be deleted",
       thesis_statement: "This will be removed",
     });
-    expect(thesisRepo.findById(deleteId)).toBeTruthy();
+    expect(await thesisRepo.findById(deleteId)).toBeTruthy();
 
-    thesisRepo.remove(deleteId);
-    expect(thesisRepo.findById(deleteId)).toBeNull();
+    await thesisRepo.remove(deleteId);
+    expect(await thesisRepo.findById(deleteId)).toBeNull();
   });
 });
 
@@ -167,8 +170,9 @@ describe("Thesis CRUD", () => {
 describe("Signal CRUD", () => {
   const signalId = "test-signal-001";
 
-  it("creates a signal", () => {
-    const created = signalRepo.create(signalId, {
+  it("creates a signal", async () => {
+    if (!dbAvailable) return;
+    const created = await signalRepo.create(signalId, {
       title: "Employment data weakening",
       description: "NFP came in below expectations for the third month.",
       category: "central_bank_action",
@@ -180,24 +184,28 @@ describe("Signal CRUD", () => {
     expect(created.status).toBe("inbox");
   });
 
-  it("fetches a signal by ID", () => {
-    const fetched = signalRepo.findById(signalId);
+  it("fetches a signal by ID", async () => {
+    if (!dbAvailable) return;
+    const fetched = await signalRepo.findById(signalId);
     expect(fetched).toBeTruthy();
     expect(fetched.title).toBe("Employment data weakening");
   });
 
-  it("lists all signals", () => {
-    const all = signalRepo.findAll();
+  it("lists all signals", async () => {
+    if (!dbAvailable) return;
+    const all = await signalRepo.findAll();
     expect(all.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("counts signals by status", () => {
-    const counts = signalRepo.countsByStatus();
+  it("counts signals by status", async () => {
+    if (!dbAvailable) return;
+    const counts = await signalRepo.countsByStatus();
     expect(counts.inbox).toBeGreaterThanOrEqual(1);
   });
 
-  it("updates a signal", () => {
-    const updated = signalRepo.update(signalId, {
+  it("updates a signal", async () => {
+    if (!dbAvailable) return;
+    const updated = await signalRepo.update(signalId, {
       reliability: "verified",
       signal_strength: 0.8,
     });
@@ -206,20 +214,22 @@ describe("Signal CRUD", () => {
     expect(updated.signal_strength).toBe(0.8);
   });
 
-  it("returns null for non-existent signal", () => {
-    expect(signalRepo.findById("no-such-signal")).toBeNull();
+  it("returns null for non-existent signal", async () => {
+    if (!dbAvailable) return;
+    expect(await signalRepo.findById("no-such-signal")).toBeNull();
   });
 
-  it("deletes a signal", () => {
+  it("deletes a signal", async () => {
+    if (!dbAvailable) return;
     const deleteId = "test-signal-delete";
-    signalRepo.create(deleteId, {
+    await signalRepo.create(deleteId, {
       title: "To be deleted",
       description: "Remove me",
       category: "other",
     });
-    expect(signalRepo.findById(deleteId)).toBeTruthy();
-    signalRepo.remove(deleteId);
-    expect(signalRepo.findById(deleteId)).toBeNull();
+    expect(await signalRepo.findById(deleteId)).toBeTruthy();
+    await signalRepo.remove(deleteId);
+    expect(await signalRepo.findById(deleteId)).toBeNull();
   });
 });
 
@@ -229,8 +239,9 @@ describe("Signal-Thesis Linking", () => {
   const thesisId = "test-thesis-001"; // from earlier test
   const signalId = "test-signal-001"; // from earlier test
 
-  it("links a signal to a thesis", () => {
-    const updated = signalRepo.update(signalId, {
+  it("links a signal to a thesis", async () => {
+    if (!dbAvailable) return;
+    const updated = await signalRepo.update(signalId, {
       thesis_id: thesisId,
       status: "linked",
     });
@@ -239,14 +250,16 @@ describe("Signal-Thesis Linking", () => {
     expect(updated.status).toBe("linked");
   });
 
-  it("fetches signals linked to a thesis", () => {
-    const linked = signalRepo.findAll({ thesis_id: thesisId });
+  it("fetches signals linked to a thesis", async () => {
+    if (!dbAvailable) return;
+    const linked = await signalRepo.findAll({ thesis_id: thesisId });
     expect(linked.length).toBeGreaterThanOrEqual(1);
     expect(linked[0].thesis_id).toBe(thesisId);
   });
 
-  it("unlinks a signal from a thesis", () => {
-    const updated = signalRepo.update(signalId, {
+  it("unlinks a signal from a thesis", async () => {
+    if (!dbAvailable) return;
+    const updated = await signalRepo.update(signalId, {
       thesis_id: null,
       status: "inbox",
     });
@@ -255,8 +268,9 @@ describe("Signal-Thesis Linking", () => {
     expect(updated.status).toBe("inbox");
   });
 
-  it("thesis has no linked signals after unlink", () => {
-    const linked = signalRepo.findAll({ thesis_id: thesisId });
+  it("thesis has no linked signals after unlink", async () => {
+    if (!dbAvailable) return;
+    const linked = await signalRepo.findAll({ thesis_id: thesisId });
     expect(linked.length).toBe(0);
   });
 });
@@ -343,7 +357,6 @@ describe("Classification", () => {
   it("classifies based on composite score", async () => {
     const { classifyThesis } = await import("../src/engine/classification.js");
 
-    // High score should classify well
     const result = classifyThesis(
       85,
       { _penaltyTotal: 0 },

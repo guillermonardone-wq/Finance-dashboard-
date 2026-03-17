@@ -1,10 +1,10 @@
 // ============================================================
 // CACHE SERVICE — Rate-limit-friendly provider cache
 // ============================================================
-// Uses SQLite provider_cache table for persistence.
+// Uses PostgreSQL provider_cache table for persistence.
 // Prevents redundant API calls within TTL windows.
 
-import { getDb } from "../db/connection.js";
+import { getKnex } from "../db/connection.js";
 
 const DEFAULT_TTL = 300; // 5 minutes
 
@@ -13,42 +13,50 @@ export class CacheService {
     this.memCache = new Map(); // in-memory L1 for hot data
   }
 
-  _getDb() {
-    return getDb();
-  }
-
   // Generate a deterministic cache key
   makeKey(provider, method, ...args) {
     return `${provider}:${method}:${args.join(":")}`;
   }
 
-  // Get from cache (L1 memory, then L2 SQLite)
+  // Get from cache (L1 memory, then L2 PostgreSQL)
   get(key) {
     // L1 check
     if (this.memCache.has(key)) {
       const entry = this.memCache.get(key);
       if (new Date(entry.expires_at) > new Date()) {
-        return JSON.parse(entry.data);
+        return typeof entry.data === "string" ? JSON.parse(entry.data) : entry.data;
       }
       this.memCache.delete(key);
     }
 
+    // L2 is async — can't use in sync get(). Use getAsync() or rely on L1.
+    return null;
+  }
+
+  // Async L2 get
+  async getAsync(key) {
+    // L1 check first
+    const l1 = this.get(key);
+    if (l1) return l1;
+
     // L2 check
     try {
-      const db = this._getDb();
-      const row = db
-        .prepare(
-          "SELECT data, expires_at FROM provider_cache WHERE cache_key = ? AND expires_at > datetime(?)",
-        )
-        .get(key, new Date().toISOString());
+      const knex = getKnex();
+      const row = await knex("provider_cache")
+        .where("cache_key", key)
+        .where("expires_at", ">", new Date().toISOString())
+        .first();
 
       if (row) {
         // Promote to L1
-        this.memCache.set(key, row);
-        db.prepare(
-          "UPDATE provider_cache SET hit_count = hit_count + 1 WHERE cache_key = ?",
-        ).run(key);
-        return JSON.parse(row.data);
+        this.memCache.set(key, {
+          data: row.data,
+          expires_at: row.expires_at,
+        });
+        await knex("provider_cache")
+          .where("cache_key", key)
+          .increment("hit_count", 1);
+        return typeof row.data === "string" ? JSON.parse(row.data) : row.data;
       }
     } catch {
       // DB not ready, continue without cache
@@ -58,23 +66,27 @@ export class CacheService {
   }
 
   // Set cache entry
-  set(key, data, provider, ttlSeconds = DEFAULT_TTL) {
+  async set(key, data, provider, ttlSeconds = DEFAULT_TTL) {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1000).toISOString();
-    const serialized = JSON.stringify(data);
 
     // L1
-    this.memCache.set(key, { data: serialized, expires_at: expiresAt });
+    this.memCache.set(key, { data, expires_at: expiresAt });
 
     // L2
     try {
-      const db = this._getDb();
-      db.prepare(
-        `
-        INSERT OR REPLACE INTO provider_cache (cache_key, provider, data, fetched_at, expires_at, hit_count)
-        VALUES (?, ?, ?, ?, ?, 0)
-      `,
-      ).run(key, provider, serialized, now.toISOString(), expiresAt);
+      const knex = getKnex();
+      await knex("provider_cache")
+        .insert({
+          cache_key: key,
+          provider: provider,
+          data: data,
+          fetched_at: now.toISOString(),
+          expires_at: expiresAt,
+          hit_count: 0,
+        })
+        .onConflict("cache_key")
+        .merge();
     } catch {
       // DB not ready, memory cache still works
     }
@@ -82,16 +94,16 @@ export class CacheService {
 
   // Get-or-fetch pattern
   async getOrFetch(key, provider, ttlSeconds, fetchFn) {
-    const cached = this.get(key);
+    const cached = await this.getAsync(key);
     if (cached) return { data: cached, fromCache: true };
 
     const data = await fetchFn();
-    this.set(key, data, provider, ttlSeconds);
+    await this.set(key, data, provider, ttlSeconds);
     return { data, fromCache: false };
   }
 
   // Cleanup expired entries
-  cleanup() {
+  async cleanup() {
     // L1
     for (const [key, entry] of this.memCache) {
       if (new Date(entry.expires_at) <= new Date()) {
@@ -100,10 +112,10 @@ export class CacheService {
     }
     // L2
     try {
-      const db = this._getDb();
-      db.prepare(
-        "DELETE FROM provider_cache WHERE expires_at < datetime(?)",
-      ).run(new Date().toISOString());
+      const knex = getKnex();
+      await knex("provider_cache")
+        .where("expires_at", "<", new Date().toISOString())
+        .del();
     } catch {
       // ignore
     }

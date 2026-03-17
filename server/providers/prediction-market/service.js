@@ -1,334 +1,246 @@
 // ============================================================
-// PREDICTION MARKET SERVICE — Database operations
+// PREDICTION MARKET SERVICE — Database operations (Knex)
 // ============================================================
 
 import { v4 as uuidv4 } from "uuid";
-import { getDb } from "../../db/connection.js";
+import { getKnex } from "../../db/connection.js";
 import { predictionMarketAdapter } from "./adapter.js";
 import { computeAssessment, computeScoringHelpers } from "./assessment.js";
 
 // ---- PROVIDERS ----
 
-export function getProviders() {
-  return getDb()
-    .prepare("SELECT * FROM prediction_market_providers ORDER BY name")
-    .all();
+export async function getProviders() {
+  return getKnex()("prediction_market_providers").orderBy("name");
 }
 
-export function getProvider(id) {
-  return getDb()
-    .prepare("SELECT * FROM prediction_market_providers WHERE id = ?")
-    .get(id);
+export async function getProvider(id) {
+  return getKnex()("prediction_market_providers").where("id", id).first();
 }
 
-export function createProvider({ name, provider_key, base_url }) {
+export async function createProvider({ name, provider_key, base_url }) {
+  const knex = getKnex();
   const id = uuidv4();
   const now = new Date().toISOString();
-  getDb()
-    .prepare(
-      `INSERT INTO prediction_market_providers (id, name, provider_key, base_url, active, created_at, updated_at)
-    VALUES (?, ?, ?, ?, 1, ?, ?)`,
-    )
-    .run(id, name, provider_key, base_url || null, now, now);
-  return getDb()
-    .prepare("SELECT * FROM prediction_market_providers WHERE id = ?")
-    .get(id);
+  await knex("prediction_market_providers").insert({
+    id,
+    name,
+    provider_key,
+    base_url: base_url || null,
+    active: true,
+    created_at: now,
+    updated_at: now,
+  });
+  return knex("prediction_market_providers").where("id", id).first();
 }
 
 // ---- EVENTS ----
 
-export function getEvents(filters = {}) {
-  let sql =
-    "SELECT e.*, p.name as provider_name FROM prediction_market_events e JOIN prediction_market_providers p ON e.provider_id = p.id WHERE 1=1";
-  const params = [];
+export async function getEvents(filters = {}) {
+  const knex = getKnex();
+  let query = knex("prediction_market_events as e")
+    .join("prediction_market_providers as p", "e.provider_id", "p.id")
+    .select("e.*", "p.name as provider_name");
 
-  if (filters.provider_id) {
-    sql += " AND e.provider_id = ?";
-    params.push(filters.provider_id);
-  }
-  if (filters.category) {
-    sql += " AND e.category = ?";
-    params.push(filters.category);
-  }
-  if (filters.status) {
-    sql += " AND e.status = ?";
-    params.push(filters.status);
-  }
-  sql += " ORDER BY e.updated_at DESC";
+  if (filters.provider_id) query = query.where("e.provider_id", filters.provider_id);
+  if (filters.category) query = query.where("e.category", filters.category);
+  if (filters.status) query = query.where("e.status", filters.status);
 
-  return getDb()
-    .prepare(sql)
-    .all(...params);
+  return query.orderBy("e.updated_at", "desc");
 }
 
-export function getEvent(id) {
-  return getDb()
-    .prepare(
-      `SELECT e.*, p.name as provider_name
-    FROM prediction_market_events e
-    JOIN prediction_market_providers p ON e.provider_id = p.id
-    WHERE e.id = ?`,
-    )
-    .get(id);
+export async function getEvent(id) {
+  return getKnex()("prediction_market_events as e")
+    .join("prediction_market_providers as p", "e.provider_id", "p.id")
+    .select("e.*", "p.name as provider_name")
+    .where("e.id", id)
+    .first();
 }
 
-export function createEvent(data) {
+export async function createEvent(data) {
+  const knex = getKnex();
   const id = uuidv4();
   const now = new Date().toISOString();
-  getDb()
-    .prepare(
-      `INSERT INTO prediction_market_events
-    (id, provider_id, external_market_id, title, description, url, category, status,
-     open_time, close_time, resolution_time, market_type, tags_json, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      id,
-      data.provider_id,
-      data.external_market_id || null,
-      data.title,
-      data.description || null,
-      data.url || null,
-      data.category || null,
-      data.status || "open",
-      data.open_time || null,
-      data.close_time || null,
-      data.resolution_time || null,
-      data.market_type || "binary",
-      JSON.stringify(data.tags || []),
-      now,
-      now,
-    );
+  await knex("prediction_market_events").insert({
+    id,
+    provider_id: data.provider_id,
+    external_market_id: data.external_market_id || null,
+    title: data.title,
+    description: data.description || null,
+    url: data.url || null,
+    category: data.category || null,
+    status: data.status || "open",
+    open_time: data.open_time || null,
+    close_time: data.close_time || null,
+    resolution_time: data.resolution_time || null,
+    market_type: data.market_type || "binary",
+    tags_json: data.tags || [],
+    created_at: now,
+    updated_at: now,
+  });
   return getEvent(id);
 }
 
-export function updateEvent(id, data) {
+export async function updateEvent(id, data) {
+  const knex = getKnex();
   const now = new Date().toISOString();
-  getDb()
-    .prepare(
-      `UPDATE prediction_market_events SET
-    title = COALESCE(?, title), description = COALESCE(?, description),
-    url = COALESCE(?, url), category = COALESCE(?, category),
-    status = COALESCE(?, status), close_time = COALESCE(?, close_time),
-    resolution_time = COALESCE(?, resolution_time), updated_at = ?
-    WHERE id = ?`,
-    )
-    .run(
-      data.title,
-      data.description,
-      data.url,
-      data.category,
-      data.status,
-      data.close_time,
-      data.resolution_time,
-      now,
-      id,
-    );
+  const updates = { updated_at: now };
+  if (data.title != null) updates.title = data.title;
+  if (data.description !== undefined) updates.description = data.description;
+  if (data.url !== undefined) updates.url = data.url;
+  if (data.category !== undefined) updates.category = data.category;
+  if (data.status != null) updates.status = data.status;
+  if (data.close_time !== undefined) updates.close_time = data.close_time;
+  if (data.resolution_time !== undefined) updates.resolution_time = data.resolution_time;
+
+  await knex("prediction_market_events").where("id", id).update(updates);
   return getEvent(id);
 }
 
 // ---- SNAPSHOTS ----
 
-export function getSnapshots(eventId, limit = 50) {
-  return getDb()
-    .prepare(
-      `SELECT * FROM prediction_market_snapshots
-    WHERE prediction_market_event_id = ?
-    ORDER BY observed_at DESC LIMIT ?`,
-    )
-    .all(eventId, limit);
+export async function getSnapshots(eventId, limit = 50) {
+  return getKnex()("prediction_market_snapshots")
+    .where("prediction_market_event_id", eventId)
+    .orderBy("observed_at", "desc")
+    .limit(limit);
 }
 
-export function getLatestSnapshot(eventId) {
-  return getDb()
-    .prepare(
-      `SELECT * FROM prediction_market_snapshots
-    WHERE prediction_market_event_id = ?
-    ORDER BY observed_at DESC LIMIT 1`,
-    )
-    .get(eventId);
+export async function getLatestSnapshot(eventId) {
+  return getKnex()("prediction_market_snapshots")
+    .where("prediction_market_event_id", eventId)
+    .orderBy("observed_at", "desc")
+    .first();
 }
 
-export function createSnapshot(data) {
+export async function createSnapshot(data) {
+  const knex = getKnex();
   const id = uuidv4();
   const normalized = predictionMarketAdapter.normalizeSnapshot(
     data,
     data.prediction_market_event_id,
   );
-  const isStale = predictionMarketAdapter.isStale(normalized.observed_at)
-    ? 1
-    : 0;
+  const isStale = predictionMarketAdapter.isStale(normalized.observed_at);
 
-  getDb()
-    .prepare(
-      `INSERT INTO prediction_market_snapshots
-    (id, prediction_market_event_id, observed_at, yes_price, no_price, implied_probability,
-     volume_24h, liquidity, spread, source_attribution, raw_payload_ref, is_stale, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      id,
-      normalized.prediction_market_event_id,
-      normalized.observed_at,
-      normalized.yes_price,
-      normalized.no_price,
-      normalized.implied_probability,
-      normalized.volume_24h,
-      normalized.liquidity,
-      normalized.spread,
-      normalized.source_attribution,
-      normalized.raw_payload_ref,
-      isStale,
-      new Date().toISOString(),
-    );
+  await knex("prediction_market_snapshots").insert({
+    id,
+    prediction_market_event_id: normalized.prediction_market_event_id,
+    observed_at: normalized.observed_at,
+    yes_price: normalized.yes_price,
+    no_price: normalized.no_price,
+    implied_probability: normalized.implied_probability,
+    volume_24h: normalized.volume_24h,
+    liquidity: normalized.liquidity,
+    spread: normalized.spread,
+    source_attribution: normalized.source_attribution,
+    raw_payload_ref: normalized.raw_payload_ref,
+    is_stale: isStale,
+    created_at: new Date().toISOString(),
+  });
 
-  return getDb()
-    .prepare("SELECT * FROM prediction_market_snapshots WHERE id = ?")
-    .get(id);
+  return knex("prediction_market_snapshots").where("id", id).first();
 }
 
 // ---- LINKS ----
 
-export function getLinksForThesis(thesisId) {
-  const links = getDb()
-    .prepare(
-      `SELECT l.*, e.title as event_title, e.description as event_description,
-    e.url as event_url, e.status as event_status, e.category as event_category,
-    p.name as provider_name
-    FROM thesis_prediction_links l
-    JOIN prediction_market_events e ON l.prediction_market_event_id = e.id
-    JOIN prediction_market_providers p ON e.provider_id = p.id
-    WHERE l.thesis_id = ?
-    ORDER BY l.link_confidence DESC`,
+export async function getLinksForThesis(thesisId) {
+  const knex = getKnex();
+  const links = await knex("thesis_prediction_links as l")
+    .join("prediction_market_events as e", "l.prediction_market_event_id", "e.id")
+    .join("prediction_market_providers as p", "e.provider_id", "p.id")
+    .select(
+      "l.*",
+      "e.title as event_title",
+      "e.description as event_description",
+      "e.url as event_url",
+      "e.status as event_status",
+      "e.category as event_category",
+      "p.name as provider_name",
     )
-    .all(thesisId);
+    .where("l.thesis_id", thesisId)
+    .orderBy("l.link_confidence", "desc");
 
   // Attach latest snapshot to each link
   for (const link of links) {
     link.latest_snapshot =
-      getLatestSnapshot(link.prediction_market_event_id) || null;
+      (await getLatestSnapshot(link.prediction_market_event_id)) || null;
   }
 
   return links;
 }
 
-export function getLinksForEvent(eventId) {
-  return getDb()
-    .prepare(
-      `SELECT l.*, t.title as thesis_title
-    FROM thesis_prediction_links l
-    JOIN theses t ON l.thesis_id = t.id
-    WHERE l.prediction_market_event_id = ?`,
-    )
-    .all(eventId);
+export async function getLinksForEvent(eventId) {
+  return getKnex()("thesis_prediction_links as l")
+    .join("theses as t", "l.thesis_id", "t.id")
+    .select("l.*", "t.title as thesis_title")
+    .where("l.prediction_market_event_id", eventId);
 }
 
-export function createLink(data) {
+export async function createLink(data) {
+  const knex = getKnex();
   const id = uuidv4();
   const now = new Date().toISOString();
-  getDb()
-    .prepare(
-      `INSERT INTO thesis_prediction_links
-    (id, thesis_id, prediction_market_event_id, link_confidence, link_type,
-     wording_match_score, wording_mismatch_flag, rationale, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      id,
-      data.thesis_id,
-      data.prediction_market_event_id,
-      data.link_confidence ?? 0.3,
-      data.link_type || "partial_match",
-      data.wording_match_score ?? 0.5,
-      data.wording_mismatch_flag ? 1 : 0,
-      data.rationale || null,
-      now,
-      now,
-    );
-  return getDb()
-    .prepare("SELECT * FROM thesis_prediction_links WHERE id = ?")
-    .get(id);
+  await knex("thesis_prediction_links").insert({
+    id,
+    thesis_id: data.thesis_id,
+    prediction_market_event_id: data.prediction_market_event_id,
+    link_confidence: data.link_confidence ?? 0.3,
+    link_type: data.link_type || "partial_match",
+    wording_match_score: data.wording_match_score ?? 0.5,
+    wording_mismatch_flag: !!data.wording_mismatch_flag,
+    rationale: data.rationale || null,
+    created_at: now,
+    updated_at: now,
+  });
+  return knex("thesis_prediction_links").where("id", id).first();
 }
 
-export function updateLink(id, data) {
+export async function updateLink(id, data) {
+  const knex = getKnex();
   const now = new Date().toISOString();
-  getDb()
-    .prepare(
-      `UPDATE thesis_prediction_links SET
-    link_confidence = COALESCE(?, link_confidence),
-    link_type = COALESCE(?, link_type),
-    wording_match_score = COALESCE(?, wording_match_score),
-    wording_mismatch_flag = COALESCE(?, wording_mismatch_flag),
-    rationale = COALESCE(?, rationale),
-    updated_at = ?
-    WHERE id = ?`,
-    )
-    .run(
-      data.link_confidence,
-      data.link_type,
-      data.wording_match_score,
-      data.wording_mismatch_flag != null
-        ? data.wording_mismatch_flag
-          ? 1
-          : 0
-        : null,
-      data.rationale,
-      now,
-      id,
-    );
-  return getDb()
-    .prepare("SELECT * FROM thesis_prediction_links WHERE id = ?")
-    .get(id);
+  const updates = { updated_at: now };
+  if (data.link_confidence != null) updates.link_confidence = data.link_confidence;
+  if (data.link_type != null) updates.link_type = data.link_type;
+  if (data.wording_match_score != null) updates.wording_match_score = data.wording_match_score;
+  if (data.wording_mismatch_flag != null) updates.wording_mismatch_flag = !!data.wording_mismatch_flag;
+  if (data.rationale !== undefined) updates.rationale = data.rationale;
+
+  await knex("thesis_prediction_links").where("id", id).update(updates);
+  return knex("thesis_prediction_links").where("id", id).first();
 }
 
-export function deleteLink(id) {
-  getDb().prepare("DELETE FROM thesis_prediction_links WHERE id = ?").run(id);
+export async function deleteLink(id) {
+  await getKnex()("thesis_prediction_links").where("id", id).del();
 }
 
 // ---- ASSESSMENTS ----
 
-export function computeAndStoreAssessment(thesisId) {
-  const db = getDb();
-  const thesis = db.prepare("SELECT * FROM theses WHERE id = ?").get(thesisId);
+export async function computeAndStoreAssessment(thesisId) {
+  const knex = getKnex();
+  const thesis = await knex("theses").where("id", thesisId).first();
   if (!thesis) return null;
 
-  // Parse JSON fields
-  const parsed = { ...thesis };
-  try {
-    parsed.probability_low = thesis.probability_low;
-  } catch {}
-  try {
-    parsed.probability_high = thesis.probability_high;
-  } catch {}
-
-  const links = getLinksForThesis(thesisId);
-  const assessment = computeAssessment(parsed, links);
+  const links = await getLinksForThesis(thesisId);
+  const assessment = computeAssessment(thesis, links);
   const helpers = computeScoringHelpers(assessment);
 
   const id = uuidv4();
   const now = new Date().toISOString();
 
-  db.prepare(
-    `INSERT INTO prediction_market_assessments
-    (id, thesis_id, assessed_at, thesis_probability_low, thesis_probability_high,
-     prediction_market_implied_probability, divergence_score, consensus_state,
-     wording_warning, liquidity_warning, thin_market_penalty, notes, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
+  await knex("prediction_market_assessments").insert({
     id,
-    thesisId,
-    now,
-    assessment.thesis_probability_low,
-    assessment.thesis_probability_high,
-    assessment.prediction_market_implied_probability,
-    assessment.divergence_score,
-    assessment.consensus_state,
-    assessment.wording_warning ? 1 : 0,
-    assessment.liquidity_warning ? 1 : 0,
-    assessment.thin_market_penalty,
-    assessment.notes,
-    now,
-  );
+    thesis_id: thesisId,
+    assessed_at: now,
+    thesis_probability_low: assessment.thesis_probability_low,
+    thesis_probability_high: assessment.thesis_probability_high,
+    prediction_market_implied_probability: assessment.prediction_market_implied_probability,
+    divergence_score: assessment.divergence_score,
+    consensus_state: assessment.consensus_state,
+    wording_warning: !!assessment.wording_warning,
+    liquidity_warning: !!assessment.liquidity_warning,
+    thin_market_penalty: assessment.thin_market_penalty,
+    notes: assessment.notes,
+    created_at: now,
+  });
 
   return {
     assessment: { id, ...assessment },
@@ -337,20 +249,16 @@ export function computeAndStoreAssessment(thesisId) {
   };
 }
 
-export function getAssessmentsForThesis(thesisId, limit = 10) {
-  return getDb()
-    .prepare(
-      `SELECT * FROM prediction_market_assessments
-    WHERE thesis_id = ? ORDER BY assessed_at DESC LIMIT ?`,
-    )
-    .all(thesisId, limit);
+export async function getAssessmentsForThesis(thesisId, limit = 10) {
+  return getKnex()("prediction_market_assessments")
+    .where("thesis_id", thesisId)
+    .orderBy("assessed_at", "desc")
+    .limit(limit);
 }
 
-export function getLatestAssessment(thesisId) {
-  return getDb()
-    .prepare(
-      `SELECT * FROM prediction_market_assessments
-    WHERE thesis_id = ? ORDER BY assessed_at DESC LIMIT 1`,
-    )
-    .get(thesisId);
+export async function getLatestAssessment(thesisId) {
+  return getKnex()("prediction_market_assessments")
+    .where("thesis_id", thesisId)
+    .orderBy("assessed_at", "desc")
+    .first();
 }

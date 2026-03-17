@@ -1,16 +1,12 @@
 // ============================================================
 // GDELT SIGNAL GENERATOR — Creates signals from GDELT article volume spikes
 // ============================================================
-// Uses the GDELT DOC 2.0 API to monitor keyword article volumes.
-// When volume for a keyword exceeds 2x the 7-day rolling average,
-// auto-creates a signal with top article URLs.
 
 import { v4 as uuidv4 } from "uuid";
-import { getDb } from "../db/connection.js";
+import { getKnex } from "../db/connection.js";
 
 const GDELT_DOC_API = "https://api.gdeltproject.org/api/v2/doc/doc";
 
-// Keywords to monitor and their signal categories
 const GDELT_KEYWORDS = [
   { query: "military escalation", category: "military_mobilization" },
   { query: "sanctions", category: "sanctions_risk" },
@@ -21,17 +17,12 @@ const GDELT_KEYWORDS = [
   { query: "taiwan strait", category: "geopolitical_escalation" },
 ];
 
-// Volume spike multiplier (env override)
 const SPIKE_MULTIPLIER = parseFloat(process.env.GDELT_SPIKE_MULTIPLIER) || 2.0;
 
-// In-memory rolling averages (persisted across checks within a server session)
 const rollingAverages = new Map();
-
-// Store for tracking article counts over time (7-day window)
 const volumeHistory = new Map();
 
 async function fetchGdeltArticleCount(query) {
-  // GDELT DOC 2.0 API: fetch article list for last 24 hours
   const params = new URLSearchParams({
     query: query,
     mode: "ArtList",
@@ -71,18 +62,15 @@ function updateRollingAverage(keyword, currentCount) {
   const history = volumeHistory.get(key);
   history.push({ count: currentCount, timestamp: Date.now() });
 
-  // Keep only 7 days of data (assuming checks every 30 min = 336 data points)
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const recent = history.filter((h) => h.timestamp > sevenDaysAgo);
   volumeHistory.set(key, recent);
 
   if (recent.length < 2) {
-    // Not enough history yet — store average and skip spike detection
     rollingAverages.set(key, currentCount);
     return { average: currentCount, isSpike: false };
   }
 
-  // Compute average excluding the current data point
   const previousEntries = recent.slice(0, -1);
   const average =
     previousEntries.reduce((s, h) => s + h.count, 0) / previousEntries.length;
@@ -95,7 +83,7 @@ function updateRollingAverage(keyword, currentCount) {
 }
 
 export async function checkGdeltSignals() {
-  const db = getDb();
+  const knex = getKnex();
   const created = [];
 
   for (const kw of GDELT_KEYWORDS) {
@@ -110,11 +98,10 @@ export async function checkGdeltSignals() {
       const sixHoursAgo = new Date(
         Date.now() - 6 * 60 * 60 * 1000,
       ).toISOString();
-      const existing = db
-        .prepare(
-          "SELECT id FROM signals WHERE source_provider = 'gdelt' AND subcategory = ? AND created_at > ?",
-        )
-        .get(kw.query, sixHoursAgo);
+      const existing = await knex("signals")
+        .where({ source_provider: "gdelt", subcategory: kw.query })
+        .where("created_at", ">", sixHoursAgo)
+        .first();
       if (existing) continue;
 
       const ratio = (result.count / average).toFixed(1);
@@ -142,36 +129,28 @@ export async function checkGdeltSignals() {
       const id = uuidv4();
       const now = new Date().toISOString();
 
-      db.prepare(
-        `
-        INSERT INTO signals (
-          id, created_at, updated_at, category, subcategory,
-          title, description, raw_source, source_type, source_provider,
-          source_url, source_attribution, novelty, reliability, signal_strength,
-          thesis_id, related_signal_ids, status, tags
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      ).run(
+      await knex("signals").insert({
         id,
-        now,
-        now,
-        kw.category,
-        kw.query,
+        user_id: "default",
+        created_at: now,
+        updated_at: now,
+        category: kw.category,
+        subcategory: kw.query,
         title,
         description,
-        rawSource,
-        "gdelt",
-        "gdelt",
-        topUrls[0] || null,
-        "GDELT Project — DOC 2.0 API",
-        "new",
-        "likely",
-        Math.min(1, parseFloat(ratio) / 5), // strength scales with spike magnitude
-        null,
-        JSON.stringify([]),
-        "inbox",
-        JSON.stringify(["auto", "gdelt", kw.query.replace(/\s+/g, "_")]),
-      );
+        raw_source: rawSource,
+        source_type: "gdelt",
+        source_provider: "gdelt",
+        source_url: topUrls[0] || null,
+        source_attribution: "GDELT Project — DOC 2.0 API",
+        novelty: "new",
+        reliability: "likely",
+        signal_strength: Math.min(1, parseFloat(ratio) / 5),
+        thesis_id: null,
+        related_signal_ids: [],
+        status: "inbox",
+        tags: ["auto", "gdelt", kw.query.replace(/\s+/g, "_")],
+      });
 
       created.push({ id, title, keyword: kw.query });
       console.log(`[GDELT Signals] Created: ${title}`);

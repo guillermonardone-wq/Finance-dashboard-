@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { ingestion } from "../services/ingestion.js";
 import { registry } from "../providers/registry.js";
-import { getDb } from "../db/connection.js";
+import { getKnex } from "../db/connection.js";
 
 const router = Router();
 
@@ -95,35 +95,17 @@ router.get("/sentiment/:symbol", async (req, res) => {
 });
 
 // GET recent market observations from DB
-router.get("/observations", (req, res) => {
-  const db = getDb();
+router.get("/observations", async (req, res) => {
+  const knex = getKnex();
   const { type, symbol, limit } = req.query;
-  let sql = "SELECT * FROM market_observations WHERE 1=1";
-  const params = [];
+  let query = knex("market_observations");
 
-  if (type) {
-    sql += " AND observation_type = ?";
-    params.push(type);
-  }
-  if (symbol) {
-    sql += " AND symbol = ?";
-    params.push(symbol);
-  }
-  sql += " ORDER BY created_at DESC LIMIT ?";
-  params.push(parseInt(limit) || 50);
+  if (type) query = query.where("observation_type", type);
+  if (symbol) query = query.where("symbol", symbol);
+  query = query.orderBy("created_at", "desc").limit(parseInt(limit) || 50);
 
-  const rows = db.prepare(sql).all(...params);
-  res.json(
-    rows.map((r) => {
-      try {
-        r.data = JSON.parse(r.data);
-      } catch {}
-      try {
-        r.metadata = JSON.parse(r.metadata);
-      } catch {}
-      return r;
-    }),
-  );
+  const rows = await query;
+  res.json(rows);
 });
 
 // POST bulk price fetch

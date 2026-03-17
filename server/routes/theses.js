@@ -5,9 +5,9 @@ import * as thesisRepo from "../db/thesis-repo.js";
 const router = Router();
 
 // GET all theses (with optional filters)
-router.get("/", (req, res) => {
+router.get("/", async (req, res) => {
   const { status, classification } = req.query;
-  const rows = thesisRepo.findAll({ status, classification });
+  const rows = await thesisRepo.findAll({ status, classification });
   console.log(
     `[Theses] GET / — filters: status=${status || "all"}, returned ${rows.length} theses`,
   );
@@ -15,8 +15,8 @@ router.get("/", (req, res) => {
 });
 
 // GET single thesis
-router.get("/:id", (req, res) => {
-  const thesis = thesisRepo.findById(req.params.id);
+router.get("/:id", async (req, res) => {
+  const thesis = await thesisRepo.findById(req.params.id);
   if (!thesis) {
     console.log(`[Theses] GET /${req.params.id} — NOT FOUND`);
     return res.status(404).json({ error: "Thesis not found" });
@@ -26,7 +26,7 @@ router.get("/:id", (req, res) => {
 });
 
 // POST create thesis
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   const id = uuidv4();
   const t = req.body;
 
@@ -64,7 +64,7 @@ router.post("/", (req, res) => {
   }
 
   try {
-    const created = thesisRepo.create(id, t);
+    const created = await thesisRepo.create(id, t);
     if (!created) {
       console.error(
         `[Theses] POST / — INSERT succeeded but SELECT returned null for id=${id}`,
@@ -84,9 +84,9 @@ router.post("/", (req, res) => {
 });
 
 // PUT update thesis
-router.put("/:id", (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
-    const updated = thesisRepo.update(req.params.id, req.body);
+    const updated = await thesisRepo.update(req.params.id, req.body);
     if (!updated) return res.status(404).json({ error: "Thesis not found" });
     res.json(updated);
   } catch (err) {
@@ -98,8 +98,8 @@ router.put("/:id", (req, res) => {
 });
 
 // DELETE thesis
-router.delete("/:id", (req, res) => {
-  thesisRepo.remove(req.params.id);
+router.delete("/:id", async (req, res) => {
+  await thesisRepo.remove(req.params.id);
   res.json({ deleted: true });
 });
 

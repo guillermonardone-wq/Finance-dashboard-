@@ -1,14 +1,13 @@
 // ============================================================
-// THESIS REPOSITORY — DB access layer for theses
-// ============================================================
-// Isolates all direct database queries for theses into one file.
-// Routes call these functions instead of touching getDb() directly.
-// This creates a clean seam for future database migration.
+// THESIS REPOSITORY — Knex-based DB access layer for theses
 // ============================================================
 
-import { getDb } from "./connection.js";
+import { getKnex, userScoped } from "./connection.js";
 
-const JSON_FIELDS = [
+// Fields stored as JSONB in PostgreSQL — no JSON.stringify/parse needed
+// when writing, but we keep the list for reference and for the
+// UPDATABLE_COLUMNS allowlist.
+const JSONB_FIELDS = new Set([
   "causal_chain",
   "affected_assets",
   "expected_timeline",
@@ -26,105 +25,10 @@ const JSON_FIELDS = [
   "penalty_details",
   "confidence_factors",
   "final_outcome",
-];
-
-function parseJsonFields(row) {
-  if (!row) return row;
-  const parsed = { ...row };
-  for (const field of JSON_FIELDS) {
-    if (parsed[field] && typeof parsed[field] === "string") {
-      try {
-        parsed[field] = JSON.parse(parsed[field]);
-      } catch {
-        /* leave as string */
-      }
-    }
-  }
-  return parsed;
-}
-
-export function findAll({ status, classification } = {}) {
-  const db = getDb();
-  let sql = "SELECT * FROM theses WHERE 1=1";
-  const params = [];
-  if (status) {
-    sql += " AND status = ?";
-    params.push(status);
-  }
-  if (classification) {
-    sql += " AND classification = ?";
-    params.push(classification);
-  }
-  sql += " ORDER BY updated_at DESC";
-  return db
-    .prepare(sql)
-    .all(...params)
-    .map(parseJsonFields);
-}
-
-export function findById(id) {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM theses WHERE id = ?").get(id);
-  return row ? parseJsonFields(row) : null;
-}
-
-export function create(id, data) {
-  const db = getDb();
-  const now = new Date().toISOString();
-  const t = data;
-
-  db.prepare(
-    `
-    INSERT INTO theses (
-      id, created_at, updated_at, title, thesis_statement, causal_chain,
-      affected_assets, expected_timeline, probability_low, probability_high, probability_best,
-      market_pricing_assessment, key_assumptions, alternative_explanations,
-      leading_indicators, confirming_indicators, invalidating_indicators,
-      coincident_indicators, lagging_indicators,
-      disconfirming_evidence, strongest_bear_case, what_would_make_opposite_stronger,
-      early_vs_right, status, classification, tags
-    ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-    )
-  `,
-  ).run(
-    id,
-    now,
-    now,
-    t.title,
-    t.thesis_statement,
-    JSON.stringify(t.causal_chain || []),
-    JSON.stringify(t.affected_assets || []),
-    JSON.stringify(t.expected_timeline || {}),
-    t.probability_low ?? 0.2,
-    t.probability_high ?? 0.6,
-    t.probability_best ?? 0.4,
-    JSON.stringify(t.market_pricing_assessment || {}),
-    JSON.stringify(t.key_assumptions || []),
-    JSON.stringify(t.alternative_explanations || []),
-    JSON.stringify(t.leading_indicators || []),
-    JSON.stringify(t.confirming_indicators || []),
-    JSON.stringify(t.invalidating_indicators || []),
-    JSON.stringify(t.coincident_indicators || []),
-    JSON.stringify(t.lagging_indicators || []),
-    JSON.stringify(t.disconfirming_evidence || []),
-    t.strongest_bear_case || "",
-    t.what_would_make_opposite_stronger || "",
-    t.early_vs_right || null,
-    t.status || "draft",
-    t.classification || "WATCH",
-    JSON.stringify(t.tags || []),
-  );
-
-  return findById(id);
-}
-
-// Fields that are stored as JSON in SQLite but exposed as objects/arrays.
-const JSON_COLUMNS = new Set(JSON_FIELDS);
+]);
 
 // All columns that callers may update. This is the authoritative allowlist.
-// Any key in `data` not in this set is silently ignored — prevents SQL injection
-// via crafted key names and ensures only known columns are written.
+// Any key in `data` not in this set is silently ignored.
 export const UPDATABLE_COLUMNS = new Set([
   "title",
   "thesis_statement",
@@ -178,19 +82,61 @@ export const UPDATABLE_COLUMNS = new Set([
   "tags",
 ]);
 
-/**
- * Serialize a value for a given column.
- * JSON columns are stringified; everything else is passed through.
- */
-function serializeValue(column, value) {
-  if (value == null) return value;
-  if (JSON_COLUMNS.has(column)) return JSON.stringify(value);
-  return value;
+export async function findAll({ status, classification } = {}, userId = "default") {
+  const knex = getKnex();
+  let query = knex("theses").where(userScoped(userId));
+  if (status) query = query.where("status", status);
+  if (classification) query = query.where("classification", classification);
+  return query.orderBy("updated_at", "desc");
 }
 
-export function update(id, data) {
-  const db = getDb();
-  const existing = db.prepare("SELECT * FROM theses WHERE id = ?").get(id);
+export async function findById(id, userId = "default") {
+  const knex = getKnex();
+  return knex("theses").where({ id, ...userScoped(userId) }).first() || null;
+}
+
+export async function create(id, data, userId = "default") {
+  const knex = getKnex();
+  const now = new Date().toISOString();
+  const t = data;
+
+  const row = {
+    id,
+    user_id: userId,
+    created_at: now,
+    updated_at: now,
+    title: t.title,
+    thesis_statement: t.thesis_statement,
+    causal_chain: t.causal_chain || [],
+    affected_assets: t.affected_assets || [],
+    expected_timeline: t.expected_timeline || {},
+    probability_low: t.probability_low ?? 0.2,
+    probability_high: t.probability_high ?? 0.6,
+    probability_best: t.probability_best ?? 0.4,
+    market_pricing_assessment: t.market_pricing_assessment || {},
+    key_assumptions: t.key_assumptions || [],
+    alternative_explanations: t.alternative_explanations || [],
+    leading_indicators: t.leading_indicators || [],
+    confirming_indicators: t.confirming_indicators || [],
+    invalidating_indicators: t.invalidating_indicators || [],
+    coincident_indicators: t.coincident_indicators || [],
+    lagging_indicators: t.lagging_indicators || [],
+    disconfirming_evidence: t.disconfirming_evidence || [],
+    strongest_bear_case: t.strongest_bear_case || "",
+    what_would_make_opposite_stronger: t.what_would_make_opposite_stronger || "",
+    early_vs_right: t.early_vs_right || null,
+    status: t.status || "draft",
+    classification: t.classification || "WATCH",
+    tags: t.tags || [],
+  };
+
+  await knex("theses").insert(row);
+  return findById(id, userId);
+}
+
+export async function update(id, data, userId = "default") {
+  const knex = getKnex();
+  const existing = await knex("theses").where({ id, ...userScoped(userId) }).first();
   if (!existing) return null;
 
   const now = new Date().toISOString();
@@ -198,11 +144,9 @@ export function update(id, data) {
   // --- Derived fields computed from data + existing state ---
 
   // Track classification changes
-  let prevClassifications = [];
-  try {
-    prevClassifications = JSON.parse(existing.previous_classifications || "[]");
-  } catch {
-    /* keep empty */
+  let prevClassifications = existing.previous_classifications || [];
+  if (typeof prevClassifications === "string") {
+    try { prevClassifications = JSON.parse(prevClassifications); } catch { prevClassifications = []; }
   }
   if (data.classification && data.classification !== existing.classification) {
     prevClassifications.push({
@@ -213,7 +157,7 @@ export function update(id, data) {
     });
   }
 
-  // Calibration snapshots — first score locks creation snapshot
+  // Calibration snapshots
   let scoreAtCreation = existing.score_at_creation;
   let classificationAtCreation = existing.classification_at_creation;
   if (data.composite_score != null && scoreAtCreation == null) {
@@ -230,40 +174,25 @@ export function update(id, data) {
     scoreAtApproval = data.composite_score;
   }
 
-  // --- Build dynamic SET clause from provided fields ---
-
-  const setClauses = ["updated_at = ?"];
-  const params = [now];
+  // --- Build update object from provided fields ---
+  const updates = { updated_at: now };
 
   for (const [key, value] of Object.entries(data)) {
     if (!UPDATABLE_COLUMNS.has(key)) continue;
-    setClauses.push(`${key} = ?`);
-    params.push(serializeValue(key, value));
+    updates[key] = value;
   }
 
   // Always write derived fields
-  setClauses.push("previous_classifications = ?");
-  params.push(JSON.stringify(prevClassifications));
+  updates.previous_classifications = prevClassifications;
+  updates.score_at_creation = scoreAtCreation;
+  updates.score_at_approval = scoreAtApproval;
+  updates.classification_at_creation = classificationAtCreation;
 
-  setClauses.push("score_at_creation = ?");
-  params.push(scoreAtCreation);
-
-  setClauses.push("score_at_approval = ?");
-  params.push(scoreAtApproval);
-
-  setClauses.push("classification_at_creation = ?");
-  params.push(classificationAtCreation);
-
-  // WHERE clause
-  params.push(id);
-
-  const sql = `UPDATE theses SET ${setClauses.join(", ")} WHERE id = ?`;
-  db.prepare(sql).run(...params);
-
-  return findById(id);
+  await knex("theses").where({ id }).update(updates);
+  return findById(id, userId);
 }
 
-export function remove(id) {
-  const db = getDb();
-  db.prepare("DELETE FROM theses WHERE id = ?").run(id);
+export async function remove(id, userId = "default") {
+  const knex = getKnex();
+  await knex("theses").where({ id, ...userScoped(userId) }).del();
 }

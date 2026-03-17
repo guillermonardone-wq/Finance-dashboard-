@@ -25,6 +25,17 @@ function envStr(key, defaultVal = "") {
 const config = {
   // Server
   port: envInt("PORT", 3002),
+
+  // PostgreSQL
+  db: {
+    host: envStr("DB_HOST", "localhost"),
+    port: envInt("DB_PORT", 5432),
+    name: envStr("DB_NAME", "signalforge"),
+    user: envStr("DB_USER", "signalforge"),
+    password: envStr("DB_PASSWORD", "dev_password"),
+  },
+
+  // Legacy (kept for reference, no longer used)
   dbPath: envStr("DB_PATH", "./data/decision-engine.db"),
 
   // API Keys

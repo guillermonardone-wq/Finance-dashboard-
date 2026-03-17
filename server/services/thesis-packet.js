@@ -1,27 +1,14 @@
 // ============================================================
 // THESIS PACKET GENERATOR — Compiles full context for LLM review
 // ============================================================
-// Builds a structured packet containing everything an LLM needs
-// to evaluate a thesis: the thesis itself, linked signals,
-// market context, prediction market data, deterministic scores,
-// and playbook matches.
-//
-// The packet is:
-// 1. Sent as structured context in the LLM prompt
-// 2. Stored alongside the LLM response for audit/replay
-// ============================================================
 
-import { getDb } from "../db/connection.js";
+import { getKnex } from "../db/connection.js";
 
 /**
  * Build a complete thesis packet for LLM evaluation.
- *
- * @param {string} thesisId
- * @param {Object} options - { includeMarketObs, includePredictionMarkets, includePlaybook }
- * @returns {Object} - structured packet
  */
-export function buildThesisPacket(thesisId, options = {}) {
-  const db = getDb();
+export async function buildThesisPacket(thesisId, options = {}) {
+  const knex = getKnex();
   const {
     includeMarketObs = true,
     includePredictionMarkets = true,
@@ -29,17 +16,8 @@ export function buildThesisPacket(thesisId, options = {}) {
   } = options;
 
   // --- Core thesis ---
-  const thesis = db.prepare("SELECT * FROM theses WHERE id = ?").get(thesisId);
+  const thesis = await knex("theses").where("id", thesisId).first();
   if (!thesis) throw new Error(`Thesis not found: ${thesisId}`);
-
-  const parseJson = (val) => {
-    if (!val || typeof val !== "string") return val;
-    try {
-      return JSON.parse(val);
-    } catch {
-      return val;
-    }
-  };
 
   const thesisData = {
     id: thesis.id,
@@ -50,41 +28,34 @@ export function buildThesisPacket(thesisId, options = {}) {
     created_at: thesis.created_at,
     updated_at: thesis.updated_at,
 
-    // Core structure
-    causal_chain: parseJson(thesis.causal_chain),
-    affected_assets: parseJson(thesis.affected_assets),
-    expected_timeline: parseJson(thesis.expected_timeline),
+    causal_chain: thesis.causal_chain,
+    affected_assets: thesis.affected_assets,
+    expected_timeline: thesis.expected_timeline,
 
-    // Probability
     probability: {
       low: thesis.probability_low,
       high: thesis.probability_high,
       best: thesis.probability_best,
     },
 
-    // Market assessment
-    market_pricing_assessment: parseJson(thesis.market_pricing_assessment),
-    key_assumptions: parseJson(thesis.key_assumptions),
-    alternative_explanations: parseJson(thesis.alternative_explanations),
+    market_pricing_assessment: thesis.market_pricing_assessment,
+    key_assumptions: thesis.key_assumptions,
+    alternative_explanations: thesis.alternative_explanations,
 
-    // Indicators
-    leading_indicators: parseJson(thesis.leading_indicators),
-    confirming_indicators: parseJson(thesis.confirming_indicators),
-    invalidating_indicators: parseJson(thesis.invalidating_indicators),
+    leading_indicators: thesis.leading_indicators,
+    confirming_indicators: thesis.confirming_indicators,
+    invalidating_indicators: thesis.invalidating_indicators,
 
-    // Disconfirmation
-    disconfirming_evidence: parseJson(thesis.disconfirming_evidence),
+    disconfirming_evidence: thesis.disconfirming_evidence,
     strongest_bear_case: thesis.strongest_bear_case,
     what_would_make_opposite_stronger: thesis.what_would_make_opposite_stronger,
     early_vs_right: thesis.early_vs_right,
   };
 
   // --- Linked signals ---
-  const signals = db
-    .prepare(
-      "SELECT id, title, description, category, source_type, source_attribution, novelty, reliability, signal_strength, created_at FROM signals WHERE thesis_id = ? AND status = ?",
-    )
-    .all(thesisId, "linked");
+  const signals = await knex("signals")
+    .select("id", "title", "description", "category", "source_type", "source_attribution", "novelty", "reliability", "signal_strength", "created_at")
+    .where({ thesis_id: thesisId, status: "linked" });
 
   // --- Deterministic score snapshot ---
   const deterministicScores = {
@@ -94,9 +65,7 @@ export function buildThesisPacket(thesisId, options = {}) {
     market_edge_layer: thesis.score_market_edge_layer,
     confidence_level: thesis.confidence_level,
     penalty_total: thesis.penalty_total,
-    penalty_details: parseJson(thesis.penalty_details),
-
-    // Individual factors
+    penalty_details: thesis.penalty_details,
     signal_quality: thesis.score_signal_quality,
     signal_independence: thesis.score_signal_independence,
     evidence_freshness: thesis.score_evidence_freshness,
@@ -117,39 +86,31 @@ export function buildThesisPacket(thesisId, options = {}) {
   // --- Market observations ---
   let marketContext = [];
   if (includeMarketObs) {
-    marketContext = db
-      .prepare(
-        `SELECT observation_type, symbol, name, data, provider, source_attribution, fetched_at
-       FROM market_observations
-       WHERE thesis_id = ?
-       ORDER BY fetched_at DESC
-       LIMIT 20`,
-      )
-      .all(thesisId)
-      .map((obs) => ({
-        ...obs,
-        data: parseJson(obs.data),
-      }));
+    marketContext = await knex("market_observations")
+      .select("observation_type", "symbol", "name", "data", "provider", "source_attribution", "fetched_at")
+      .where("thesis_id", thesisId)
+      .orderBy("fetched_at", "desc")
+      .limit(20);
   }
 
   // --- Prediction market context ---
   let predictionMarketContext = null;
   if (includePredictionMarkets) {
-    const links = db
-      .prepare(
-        `SELECT tpl.*, pme.title as event_title, pme.description as event_description,
-              pme.status as event_status, pme.category as event_category
-       FROM thesis_prediction_links tpl
-       JOIN prediction_market_events pme ON tpl.prediction_market_event_id = pme.id
-       WHERE tpl.thesis_id = ?`,
+    const links = await knex("thesis_prediction_links as tpl")
+      .join("prediction_market_events as pme", "tpl.prediction_market_event_id", "pme.id")
+      .select(
+        "tpl.*",
+        "pme.title as event_title",
+        "pme.description as event_description",
+        "pme.status as event_status",
+        "pme.category as event_category",
       )
-      .all(thesisId);
+      .where("tpl.thesis_id", thesisId);
 
-    const latestAssessment = db
-      .prepare(
-        "SELECT * FROM prediction_market_assessments WHERE thesis_id = ? ORDER BY assessed_at DESC LIMIT 1",
-      )
-      .get(thesisId);
+    const latestAssessment = await knex("prediction_market_assessments")
+      .where("thesis_id", thesisId)
+      .orderBy("assessed_at", "desc")
+      .first();
 
     if (links.length > 0 || latestAssessment) {
       predictionMarketContext = {
@@ -184,13 +145,10 @@ export function buildThesisPacket(thesisId, options = {}) {
   // --- Playbook matches ---
   let playbookMatches = [];
   if (includePlaybook) {
-    const entries = db
-      .prepare(
-        "SELECT id, title, category, pattern_description, trigger_conditions, typical_assets, success_rate_estimate FROM playbook_entries WHERE status = 'active'",
-      )
-      .all();
+    const entries = await knex("playbook_entries")
+      .select("id", "title", "category", "pattern_description", "trigger_conditions", "typical_assets", "success_rate_estimate")
+      .where("status", "active");
 
-    // Simple keyword overlap for packet — full matching is done by engine
     const thesisWords = new Set(
       `${thesis.title} ${thesis.thesis_statement}`
         .toLowerCase()
@@ -200,7 +158,6 @@ export function buildThesisPacket(thesisId, options = {}) {
     const signalCategories = new Set(signals.map((s) => s.category));
 
     for (const entry of entries) {
-      const triggers = parseJson(entry.trigger_conditions) || [];
       const categoryMatch = signalCategories.has(entry.category);
       const patternWords = (entry.pattern_description || "")
         .toLowerCase()

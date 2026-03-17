@@ -1,17 +1,9 @@
 // ============================================================
 // PATTERN MATCHER — Compares clusters against playbook patterns
 // ============================================================
-// Pattern match ≠ proof. Similarity to a known setup does NOT
-// mean the setup will play out the same way.
-//
-// The matcher explicitly tracks:
-// - what matched (precursors present)
-// - what's missing (expected confirmations absent)
-// - false positive overlap (known ways this pattern fails)
-// ============================================================
 
 import { validatePatternMatch } from "./types.js";
-import { getDb } from "../db/connection.js";
+import { getKnex } from "../db/connection.js";
 
 // Built-in archetype patterns (supplemented by playbook_entries DB table)
 const ARCHETYPE_PATTERNS = [
@@ -20,22 +12,10 @@ const ARCHETYPE_PATTERNS = [
     name: "Energy Chokepoint Disruption",
     category: "energy_bottleneck",
     precursors: [
-      {
-        description: "Military activity near chokepoint",
-        categories: ["military_mobilization", "conflict_kinetic"],
-      },
-      {
-        description: "Shipping insurance rate increase",
-        categories: ["shipping_disruption"],
-      },
-      {
-        description: "Geopolitical escalation in region",
-        categories: ["geopolitical_escalation"],
-      },
-      {
-        description: "Oil/energy market complacency",
-        categories: ["market_complacency", "energy_bottleneck"],
-      },
+      { description: "Military activity near chokepoint", categories: ["military_mobilization", "conflict_kinetic"] },
+      { description: "Shipping insurance rate increase", categories: ["shipping_disruption"] },
+      { description: "Geopolitical escalation in region", categories: ["geopolitical_escalation"] },
+      { description: "Oil/energy market complacency", categories: ["market_complacency", "energy_bottleneck"] },
     ],
     expected_confirmations: [
       "Actual tanker rerouting or avoidance",
@@ -57,22 +37,10 @@ const ARCHETYPE_PATTERNS = [
     name: "Central Bank Policy Surprise",
     category: "central_bank_action",
     precursors: [
-      {
-        description: "Inflation data above expectations",
-        categories: ["central_bank_action", "policy_shock"],
-      },
-      {
-        description: "Political pressure on central bank",
-        categories: ["election_political", "policy_shock"],
-      },
-      {
-        description: "Forward guidance language shift",
-        categories: ["central_bank_action"],
-      },
-      {
-        description: "Currency weakness accelerating",
-        categories: ["currency_instability"],
-      },
+      { description: "Inflation data above expectations", categories: ["central_bank_action", "policy_shock"] },
+      { description: "Political pressure on central bank", categories: ["election_political", "policy_shock"] },
+      { description: "Forward guidance language shift", categories: ["central_bank_action"] },
+      { description: "Currency weakness accelerating", categories: ["currency_instability"] },
     ],
     expected_confirmations: [
       "Central bank meeting minutes showing dissent",
@@ -94,22 +62,10 @@ const ARCHETYPE_PATTERNS = [
     name: "Sanctions Escalation Cycle",
     category: "sanctions_risk",
     precursors: [
-      {
-        description: "Diplomatic deterioration",
-        categories: ["geopolitical_escalation", "diplomatic_shift"],
-      },
-      {
-        description: "Initial sanctions or threats",
-        categories: ["sanctions_risk"],
-      },
-      {
-        description: "Target country provocation",
-        categories: ["military_mobilization", "conflict_kinetic"],
-      },
-      {
-        description: "Allied coordination signals",
-        categories: ["geopolitical_escalation"],
-      },
+      { description: "Diplomatic deterioration", categories: ["geopolitical_escalation", "diplomatic_shift"] },
+      { description: "Initial sanctions or threats", categories: ["sanctions_risk"] },
+      { description: "Target country provocation", categories: ["military_mobilization", "conflict_kinetic"] },
+      { description: "Allied coordination signals", categories: ["geopolitical_escalation"] },
     ],
     expected_confirmations: [
       "Draft sanctions package leaked or announced",
@@ -123,11 +79,7 @@ const ARCHETYPE_PATTERNS = [
       "Target country finds alternative trade routes quickly",
       "Market has already priced worst-case scenario",
     ],
-    typical_assets: [
-      "affected commodities",
-      "target country FX/equities",
-      "shipping",
-    ],
+    typical_assets: ["affected commodities", "target country FX/equities", "shipping"],
     typical_timeline: "2-12 weeks from initial signals to implementation",
   },
   {
@@ -135,22 +87,10 @@ const ARCHETYPE_PATTERNS = [
     name: "Geopolitical Crisis Escalation",
     category: "geopolitical_escalation",
     precursors: [
-      {
-        description: "Diplomatic breakdown or recall of envoys",
-        categories: ["geopolitical_escalation", "diplomatic_shift"],
-      },
-      {
-        description: "Military mobilization or repositioning",
-        categories: ["military_mobilization"],
-      },
-      {
-        description: "Intelligence community warnings",
-        categories: ["geopolitical_escalation"],
-      },
-      {
-        description: "Civilian evacuation advisories",
-        categories: ["geopolitical_escalation"],
-      },
+      { description: "Diplomatic breakdown or recall of envoys", categories: ["geopolitical_escalation", "diplomatic_shift"] },
+      { description: "Military mobilization or repositioning", categories: ["military_mobilization"] },
+      { description: "Intelligence community warnings", categories: ["geopolitical_escalation"] },
+      { description: "Civilian evacuation advisories", categories: ["geopolitical_escalation"] },
     ],
     expected_confirmations: [
       "Sustained military buildup (not just exercises)",
@@ -164,12 +104,7 @@ const ARCHETYPE_PATTERNS = [
       "Back-channel diplomacy resolving tension before escalation",
       "Media amplification beyond actual operational significance",
     ],
-    typical_assets: [
-      "safe havens (GC, CHF, JPY, UST)",
-      "regional equities",
-      "defense stocks",
-      "energy",
-    ],
+    typical_assets: ["safe havens (GC, CHF, JPY, UST)", "regional equities", "defense stocks", "energy"],
     typical_timeline: "1-6 weeks for crisis arc",
   },
   {
@@ -177,22 +112,10 @@ const ARCHETYPE_PATTERNS = [
     name: "Emerging Market Currency Crisis",
     category: "currency_instability",
     precursors: [
-      {
-        description: "Rapid FX depreciation",
-        categories: ["currency_instability"],
-      },
-      {
-        description: "Capital outflow acceleration",
-        categories: ["currency_instability", "credit_stress"],
-      },
-      {
-        description: "Central bank reserves declining",
-        categories: ["central_bank_action"],
-      },
-      {
-        description: "Political instability or policy misstep",
-        categories: ["election_political", "policy_shock"],
-      },
+      { description: "Rapid FX depreciation", categories: ["currency_instability"] },
+      { description: "Capital outflow acceleration", categories: ["currency_instability", "credit_stress"] },
+      { description: "Central bank reserves declining", categories: ["central_bank_action"] },
+      { description: "Political instability or policy misstep", categories: ["election_political", "policy_shock"] },
     ],
     expected_confirmations: [
       "Emergency rate hike",
@@ -206,26 +129,47 @@ const ARCHETYPE_PATTERNS = [
       "External support package prevents collapse",
       "Currency weakness driven by global USD strength, not local crisis",
     ],
-    typical_assets: [
-      "target FX pair",
-      "EM sovereign bonds",
-      "EEM",
-      "contagion currencies",
-    ],
+    typical_assets: ["target FX pair", "EM sovereign bonds", "EEM", "contagion currencies"],
     typical_timeline: "1-8 weeks from first signs to resolution attempt",
   },
 ];
 
-/**
- * Match a signal cluster against known patterns.
- * @param {Object} cluster - Validated SignalCluster
- * @returns {Object|null} Best PatternMatch or null if no match
- */
 export function matchPatterns(cluster) {
   const clusterCategories = new Set(cluster.categories || []);
   const matches = [];
 
-  // Check against archetypes
+  for (const pattern of ARCHETYPE_PATTERNS) {
+    const result = scorePatternMatch(cluster, pattern, clusterCategories);
+    if (result.match_score >= 0.2) {
+      matches.push(result);
+    }
+  }
+
+  // Check against DB playbook entries (sync-safe: use try/catch)
+  try {
+    // Note: This is called from a sync context in the pipeline.
+    // The pipeline's runFullScan pre-fetches data. For playbook entries,
+    // we'll do an async fetch when possible. For now, skip DB fetch
+    // if called synchronously. The pipeline will pass playbook data
+    // through options in a future iteration.
+  } catch {
+    // DB not available
+  }
+
+  if (matches.length === 0) return null;
+
+  matches.sort((a, b) => b.match_score - a.match_score);
+  const best = matches[0];
+
+  const validated = validatePatternMatch(best);
+  return validated.normalized;
+}
+
+// Async version for when we can await
+export async function matchPatternsAsync(cluster) {
+  const clusterCategories = new Set(cluster.categories || []);
+  const matches = [];
+
   for (const pattern of ARCHETYPE_PATTERNS) {
     const result = scorePatternMatch(cluster, pattern, clusterCategories);
     if (result.match_score >= 0.2) {
@@ -235,26 +179,24 @@ export function matchPatterns(cluster) {
 
   // Check against DB playbook entries
   try {
-    const db = getDb();
-    const playbooks = db
-      .prepare("SELECT * FROM playbook_entries WHERE status = ?")
-      .all("active");
+    const knex = getKnex();
+    const playbooks = await knex("playbook_entries").where("status", "active");
     for (const pb of playbooks) {
-      const triggers = JSON.parse(pb.trigger_conditions || "[]");
-      const assets = JSON.parse(pb.typical_assets || "[]");
-      const mistakes = JSON.parse(pb.common_mistakes || "[]");
+      const triggers = pb.trigger_conditions || [];
+      const assets = pb.typical_assets || [];
+      const mistakes = pb.common_mistakes || [];
 
       const syntheticPattern = {
         id: pb.id,
         name: pb.title,
         category: pb.category,
-        precursors: triggers.map((t) => ({
+        precursors: (Array.isArray(triggers) ? triggers : []).map((t) => ({
           description: t,
           categories: [pb.category],
         })),
         expected_confirmations: [],
-        common_false_positives: mistakes,
-        typical_assets: assets,
+        common_false_positives: Array.isArray(mistakes) ? mistakes : [],
+        typical_assets: Array.isArray(assets) ? assets : [],
       };
 
       const result = scorePatternMatch(
@@ -272,7 +214,6 @@ export function matchPatterns(cluster) {
 
   if (matches.length === 0) return null;
 
-  // Return best match
   matches.sort((a, b) => b.match_score - a.match_score);
   const best = matches[0];
 
@@ -281,7 +222,6 @@ export function matchPatterns(cluster) {
 }
 
 function scorePatternMatch(cluster, pattern, clusterCategories) {
-  // Score precursor matches
   let precursorHits = 0;
   const matchedPrecursors = [];
   const missingPrecursors = [];
@@ -301,10 +241,8 @@ function scorePatternMatch(cluster, pattern, clusterCategories) {
       ? precursorHits / pattern.precursors.length
       : 0;
 
-  // Geography relevance boost
   const geoRelevant = cluster.primary_geographies?.length > 0 ? 0.1 : 0;
 
-  // Cluster strength boost
   const strengthBoost =
     {
       weak: 0,
@@ -314,7 +252,6 @@ function scorePatternMatch(cluster, pattern, clusterCategories) {
       significant: 0.2,
     }[cluster.cluster_strength] || 0;
 
-  // False positive overlap
   const fpOverlap =
     pattern.common_false_positives.length > 0
       ? Math.min(

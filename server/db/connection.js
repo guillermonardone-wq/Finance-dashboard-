@@ -1,33 +1,57 @@
-import Database from "better-sqlite3";
-import { readFileSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+// ============================================================
+// DATABASE CONNECTION — Knex + PostgreSQL
+// ============================================================
+// Replaces better-sqlite3 with Knex connection pool.
+// All repo files import knex from here instead of getDb().
+// ============================================================
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import Knex from "knex";
+import config from "../config.js";
 
-let db = null;
+let knexInstance = null;
 
-export function getDb() {
-  if (!db) {
-    const dbPath =
-      process.env.DB_PATH || join(__dirname, "../../data/decision-engine.db");
-    db = new Database(dbPath);
-    db.pragma("journal_mode = WAL");
-    db.pragma("foreign_keys = ON");
+export function getKnex() {
+  if (!knexInstance) {
+    knexInstance = Knex({
+      client: "pg",
+      connection: {
+        host: config.db.host,
+        port: config.db.port,
+        database: config.db.name,
+        user: config.db.user,
+        password: config.db.password,
+      },
+      pool: { min: 2, max: 10 },
+    });
   }
-  return db;
+  return knexInstance;
 }
 
-export function initDb() {
-  const database = getDb();
-  const schema = readFileSync(join(__dirname, "schema.sql"), "utf-8");
-  database.exec(schema);
-  return database;
+/**
+ * Run pending Knex migrations on startup.
+ */
+export async function initDb() {
+  const knex = getKnex();
+  await knex.migrate.latest({
+    directory: "./server/db/migrations",
+  });
 }
 
-export function closeDb() {
-  if (db) {
-    db.close();
-    db = null;
+/**
+ * Graceful shutdown — destroy the connection pool.
+ */
+export async function closeDb() {
+  if (knexInstance) {
+    await knexInstance.destroy();
+    knexInstance = null;
   }
 }
+
+/**
+ * Helper: scope any query to a user_id.
+ * Usage: knex('theses').where(userScoped(userId)).where(...)
+ */
+export function userScoped(userId = "default") {
+  return { user_id: userId };
+}
+

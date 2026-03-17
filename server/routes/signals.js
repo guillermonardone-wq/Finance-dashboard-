@@ -5,26 +5,26 @@ import * as signalRepo from "../db/signal-repo.js";
 const router = Router();
 
 // GET all signals
-router.get("/", (req, res) => {
+router.get("/", async (req, res) => {
   const { status, category, thesis_id } = req.query;
-  const rows = signalRepo.findAll({ status, category, thesis_id });
+  const rows = await signalRepo.findAll({ status, category, thesis_id });
   res.json(rows);
 });
 
 // GET signal counts by status
-router.get("/counts", (req, res) => {
-  res.json(signalRepo.countsByStatus());
+router.get("/counts", async (req, res) => {
+  res.json(await signalRepo.countsByStatus());
 });
 
 // GET single signal
-router.get("/:id", (req, res) => {
-  const signal = signalRepo.findById(req.params.id);
+router.get("/:id", async (req, res) => {
+  const signal = await signalRepo.findById(req.params.id);
   if (!signal) return res.status(404).json({ error: "Signal not found" });
   res.json(signal);
 });
 
 // POST create signal
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   const s = req.body;
 
   if (!s || !s.title || !s.title.trim()) {
@@ -39,7 +39,7 @@ router.post("/", (req, res) => {
 
   try {
     const id = uuidv4();
-    const created = signalRepo.create(id, s);
+    const created = await signalRepo.create(id, s);
     if (!created) {
       console.error(
         `[Signals] POST / — INSERT succeeded but SELECT returned null for id=${id}`,
@@ -58,9 +58,9 @@ router.post("/", (req, res) => {
 });
 
 // PUT update signal
-router.put("/:id", (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
-    const updated = signalRepo.update(req.params.id, req.body);
+    const updated = await signalRepo.update(req.params.id, req.body);
     if (!updated) return res.status(404).json({ error: "Signal not found" });
     res.json(updated);
   } catch (err) {
@@ -72,8 +72,8 @@ router.put("/:id", (req, res) => {
 });
 
 // DELETE signal
-router.delete("/:id", (req, res) => {
-  signalRepo.remove(req.params.id);
+router.delete("/:id", async (req, res) => {
+  await signalRepo.remove(req.params.id);
   res.json({ deleted: true });
 });
 

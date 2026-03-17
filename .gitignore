@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 data/
+backups/
 .env
 
 # Editor directories and files

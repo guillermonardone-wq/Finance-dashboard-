@@ -9,7 +9,16 @@ dotenv.config();
 import { initDb, closeDb } from "./db/connection.js";
 import { seed } from "./seed-fn.js";
 
-console.log("Initializing database...");
-initDb();
-seed();
-closeDb();
+(async () => {
+  try {
+    console.log("Initializing database...");
+    await initDb();
+    await seed();
+    console.log("Seed complete.");
+  } catch (err) {
+    console.error("Seed failed:", err);
+    process.exitCode = 1;
+  } finally {
+    await closeDb();
+  }
+})();

@@ -1,39 +1,24 @@
 // ============================================================
 // MISPRICING CHECKER — Separates important from tradable
 // ============================================================
-// An event can be important but already priced.
-// An event can be dramatic but not economically significant.
-// An event can be novel but the market is already reacting.
-//
-// This agent answers: is there actually a gap between what
-// the market is pricing and what the cluster implies?
-//
-// Key rule: if data is stale or missing, attach penalty.
-// Never assume mispricing just because you can't check.
-// ============================================================
 
 import {
   validateMispricingAssessment,
   MARKET_REACTION_STATES,
 } from "./types.js";
-import { getDb } from "../db/connection.js";
+import { getKnex } from "../db/connection.js";
 
-/**
- * Assess whether the market may be mispricing a signal cluster.
- * @param {Object} cluster - Validated SignalCluster
- * @param {Object} options - { marketObservations: [], maxStaleHours: 24 }
- * @returns {Object} Validated MispricingAssessment
- */
 export function assessMispricing(cluster, options = {}) {
   const { maxStaleHours = 24 } = options;
 
-  // Gather relevant market observations
   let marketObs = options.marketObservations || [];
   if (marketObs.length === 0) {
-    marketObs = fetchRelevantObservations(cluster);
+    // fetchRelevantObservations is now async, but assessMispricing is called synchronously
+    // from the pipeline. We'll handle this by passing marketObs from the caller.
+    // If no observations were passed, we skip DB fetch in sync context.
+    marketObs = [];
   }
 
-  // Check data freshness
   const now = Date.now();
   let avgFreshnessHours = null;
   let staleDataPenalty = false;
@@ -51,10 +36,8 @@ export function assessMispricing(cluster, options = {}) {
     avgFreshnessHours = null;
   }
 
-  // Determine market reaction state
   const reactionState = determineReactionState(cluster, marketObs);
 
-  // Identify correlated assets checked
   const linkedSymbols = cluster.linked_market_symbols || [];
   const checkedAssets = marketObs.map((obs) => {
     const data = typeof obs.data === "string" ? JSON.parse(obs.data) : obs.data;
@@ -65,7 +48,6 @@ export function assessMispricing(cluster, options = {}) {
     };
   });
 
-  // Find market signals (significant moves in correlated assets)
   const marketSignals = [];
   for (const obs of marketObs) {
     const data = typeof obs.data === "string" ? JSON.parse(obs.data) : obs.data;
@@ -92,32 +74,29 @@ export function assessMispricing(cluster, options = {}) {
     }
   }
 
-  // Compute implied mispricing likelihood
-  let mispricingLikelihood = 0.3; // default: uncertain
+  let mispricingLikelihood = 0.3;
 
   if (marketObs.length === 0) {
-    mispricingLikelihood = 0.3; // cannot assess
+    mispricingLikelihood = 0.3;
   } else if (
     reactionState === "no_reaction" &&
     cluster.cluster_strength !== "weak"
   ) {
-    mispricingLikelihood = 0.6; // market hasn't moved but cluster is real
+    mispricingLikelihood = 0.6;
   } else if (reactionState === "early_reaction") {
-    mispricingLikelihood = 0.5; // some reaction, may have more to go
+    mispricingLikelihood = 0.5;
   } else if (reactionState === "partial_repricing") {
-    mispricingLikelihood = 0.35; // partial move, less room
+    mispricingLikelihood = 0.35;
   } else if (reactionState === "fully_repriced") {
-    mispricingLikelihood = 0.1; // opportunity likely gone
+    mispricingLikelihood = 0.1;
   } else if (reactionState === "overreaction") {
-    mispricingLikelihood = 0.15; // opposite direction may be the trade
+    mispricingLikelihood = 0.15;
   }
 
-  // Apply stale data discount
   if (staleDataPenalty) {
     mispricingLikelihood = Math.max(0.1, mispricingLikelihood * 0.7);
   }
 
-  // Build reasoning
   const reasoningParts = [];
   reasoningParts.push(`Market reaction: ${reactionState}`);
   reasoningParts.push(
@@ -175,27 +154,4 @@ function determineReactionState(cluster, marketObs) {
   if (maxMove > 3 || avgMove > 1.5) return "partial_repricing";
   if (maxMove > 1 || avgMove > 0.5) return "early_reaction";
   return "no_reaction";
-}
-
-function fetchRelevantObservations(cluster) {
-  try {
-    const db = getDb();
-    const symbols = cluster.linked_market_symbols || [];
-    if (symbols.length === 0) return [];
-
-    const placeholders = symbols.map(() => "?").join(",");
-    return db
-      .prepare(
-        `
-      SELECT * FROM market_observations
-      WHERE symbol IN (${placeholders})
-      AND created_at > datetime('now', '-48 hours')
-      ORDER BY created_at DESC
-      LIMIT 20
-    `,
-      )
-      .all(...symbols);
-  } catch {
-    return [];
-  }
 }

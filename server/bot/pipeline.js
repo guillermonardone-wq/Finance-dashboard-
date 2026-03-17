@@ -1,17 +1,6 @@
 // ============================================================
 // BOT PIPELINE — Orchestrates the 6-agent analysis workflow
 // ============================================================
-// Pipeline flow:
-//   1. Scout: raw inputs → CandidateSignals
-//   2. Clusterer: CandidateSignals → SignalClusters
-//   3. Pattern Matcher: each cluster → PatternMatch
-//   4. Mispricing Checker: each cluster → MispricingAssessment
-//   5. Red-Team: each cluster → CounterCase
-//   6. Governor: all inputs → BotRecommendation
-//
-// The pipeline produces a complete analysis per cluster,
-// preserving all intermediate outputs for audit.
-// ============================================================
 
 import { scoutSignals } from "./scout.js";
 import { clusterSignals } from "./clusterer.js";
@@ -20,15 +9,8 @@ import { assessMispricing } from "./mispricing.js";
 import { generateCounterCase } from "./red-team.js";
 import { runGovernor, explainGovernorDecision } from "./governor.js";
 import { v4 as uuidv4 } from "uuid";
-import { getDb } from "../db/connection.js";
+import { getKnex } from "../db/connection.js";
 
-/**
- * Run the full bot pipeline on a set of raw inputs.
- *
- * @param {Array} rawInputs - Array of { type: 'signal'|'news'|'market_observation', data: {...} }
- * @param {Object} options - { marketObservations: [], clusteringOptions: {} }
- * @returns {Object} Full pipeline result with all intermediate outputs
- */
 export function runPipeline(rawInputs, options = {}) {
   const pipelineId = uuidv4();
   const startTime = Date.now();
@@ -94,22 +76,15 @@ export function runPipeline(rawInputs, options = {}) {
       cluster_title: cluster.title,
     });
 
-    // Stage 3: Pattern Match
     const patternMatch = matchPatterns(cluster);
-
-    // Stage 4: Mispricing Assessment
     const mispricingAssessment = assessMispricing(cluster, {
       marketObservations: options.marketObservations || [],
     });
-
-    // Stage 5: Red-Team Counter Case
     const counterCase = generateCounterCase(
       cluster,
       patternMatch,
       mispricingAssessment,
     );
-
-    // Stage 6: Governor Routing
     const recommendation = runGovernor({
       cluster,
       candidateSignals: clusterCandidates,
@@ -117,7 +92,6 @@ export function runPipeline(rawInputs, options = {}) {
       mispricingAssessment,
       counterCase,
     });
-
     const explanation = explainGovernorDecision(recommendation);
 
     analyses.push({
@@ -141,7 +115,6 @@ export function runPipeline(rawInputs, options = {}) {
     });
   }
 
-  // Sort analyses: escalations first, then by recommended state priority
   const statePriority = {
     ESCALATE: 0,
     DEVELOP_THESIS: 1,
@@ -191,52 +164,40 @@ export function runPipeline(rawInputs, options = {}) {
     audit_log: auditLog,
   };
 
-  // Persist to audit log
-  persistPipelineRun(result);
+  // Persist (fire-and-forget)
+  persistPipelineRun(result).catch(() => {});
 
   return result;
 }
 
-/**
- * Run the pipeline on all current inbox signals + recent market observations.
- * This is the "scan everything" entry point.
- */
-export function runFullScan() {
+export async function runFullScan() {
   try {
-    const db = getDb();
+    const knex = getKnex();
 
-    // Gather inbox and reviewing signals
-    const signals = db
-      .prepare(
-        "SELECT * FROM signals WHERE status IN ('inbox', 'reviewing', 'linked') ORDER BY created_at DESC LIMIT 100",
-      )
-      .all();
+    const signals = await knex("signals")
+      .whereIn("status", ["inbox", "reviewing", "linked"])
+      .orderBy("created_at", "desc")
+      .limit(100);
 
-    // Gather recent market observations (news type)
-    const newsObs = db
-      .prepare(
-        "SELECT * FROM market_observations WHERE observation_type = 'news' AND created_at > datetime('now', '-48 hours') ORDER BY created_at DESC LIMIT 50",
-      )
-      .all();
+    const newsObs = await knex("market_observations")
+      .where("observation_type", "news")
+      .where("created_at", ">", knex.raw("now() - interval '48 hours'"))
+      .orderBy("created_at", "desc")
+      .limit(50);
 
-    // Gather all market observations for mispricing checks
-    const allMarketObs = db
-      .prepare(
-        "SELECT * FROM market_observations WHERE observation_type IN ('price', 'candle', 'volatility', 'sentiment') AND created_at > datetime('now', '-48 hours') ORDER BY created_at DESC LIMIT 50",
-      )
-      .all();
+    const allMarketObs = await knex("market_observations")
+      .whereIn("observation_type", ["price", "candle", "volatility", "sentiment"])
+      .where("created_at", ">", knex.raw("now() - interval '48 hours'"))
+      .orderBy("created_at", "desc")
+      .limit(50);
 
-    // Build raw inputs
     const rawInputs = [
-      ...signals.map((s) => ({ type: "signal", data: parseJsonFields(s) })),
-      ...newsObs.map((o) => ({
-        type: "market_observation",
-        data: parseJsonFields(o),
-      })),
+      ...signals.map((s) => ({ type: "signal", data: s })),
+      ...newsObs.map((o) => ({ type: "market_observation", data: o })),
     ];
 
     return runPipeline(rawInputs, {
-      marketObservations: allMarketObs.map((o) => parseJsonFields(o)),
+      marketObservations: allMarketObs,
     });
   } catch (err) {
     return {
@@ -251,97 +212,38 @@ export function runFullScan() {
   }
 }
 
-function persistPipelineRun(result) {
+async function persistPipelineRun(result) {
   try {
-    const db = getDb();
-    // Ensure bot_pipeline_runs table exists
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS bot_pipeline_runs (
-        id TEXT PRIMARY KEY,
-        run_at TEXT NOT NULL,
-        duration_ms INTEGER,
-        status TEXT NOT NULL,
-        summary TEXT,
-        full_result TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS bot_recommendations (
-        id TEXT PRIMARY KEY,
-        pipeline_run_id TEXT NOT NULL,
-        cluster_id TEXT NOT NULL,
-        cluster_title TEXT,
-        recommended_state TEXT NOT NULL,
-        confidence_best REAL,
-        rationale TEXT,
-        why_not_higher TEXT,
-        penalties_count INTEGER,
-        overrides_count INTEGER,
-        pattern_match_name TEXT,
-        mispricing_state TEXT,
-        counter_case_quality REAL,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
+    const knex = getKnex();
 
-    db.prepare(
-      `
-      INSERT INTO bot_pipeline_runs (id, run_at, duration_ms, status, summary, full_result)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `,
-    ).run(
-      result.pipeline_id,
-      result.run_at || new Date().toISOString(),
-      result.duration_ms || 0,
-      result.status,
-      JSON.stringify(result.summary || {}),
-      JSON.stringify(result),
-    );
+    await knex("bot_pipeline_runs").insert({
+      id: result.pipeline_id,
+      run_at: result.run_at || new Date().toISOString(),
+      duration_ms: result.duration_ms || 0,
+      status: result.status,
+      summary: result.summary || {},
+      full_result: result,
+    });
 
     for (const analysis of result.analyses || []) {
       const rec = analysis.recommendation;
-      db.prepare(
-        `
-        INSERT INTO bot_recommendations (
-          id, pipeline_run_id, cluster_id, cluster_title, recommended_state,
-          confidence_best, rationale, why_not_higher, penalties_count, overrides_count,
-          pattern_match_name, mispricing_state, counter_case_quality
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      ).run(
-        rec.id,
-        result.pipeline_id,
-        rec.cluster_id,
-        analysis.cluster?.title || "",
-        rec.recommended_state,
-        rec.confidence_range?.best || null,
-        rec.rationale,
-        rec.why_not_higher,
-        (rec.penalties_applied || []).length,
-        (rec.governor_overrides || []).length,
-        analysis.pattern_match?.pattern_name || null,
-        analysis.mispricing_assessment?.market_reaction_state || null,
-        analysis.counter_case?.reasoning_quality_score || null,
-      );
+      await knex("bot_recommendations").insert({
+        id: rec.id,
+        pipeline_run_id: result.pipeline_id,
+        cluster_id: rec.cluster_id,
+        cluster_title: analysis.cluster?.title || "",
+        recommended_state: rec.recommended_state,
+        confidence_best: rec.confidence_range?.best || null,
+        rationale: rec.rationale,
+        why_not_higher: rec.why_not_higher,
+        penalties_count: (rec.penalties_applied || []).length,
+        overrides_count: (rec.governor_overrides || []).length,
+        pattern_match_name: analysis.pattern_match?.pattern_name || null,
+        mispricing_state: analysis.mispricing_assessment?.market_reaction_state || null,
+        counter_case_quality: analysis.counter_case?.reasoning_quality_score || null,
+      });
     }
   } catch {
     // Don't fail pipeline on persistence errors
   }
-}
-
-function parseJsonFields(row) {
-  if (!row) return row;
-  const parsed = { ...row };
-  for (const key of Object.keys(parsed)) {
-    if (
-      typeof parsed[key] === "string" &&
-      (parsed[key].startsWith("{") || parsed[key].startsWith("["))
-    ) {
-      try {
-        parsed[key] = JSON.parse(parsed[key]);
-      } catch {}
-    }
-  }
-  return parsed;
 }

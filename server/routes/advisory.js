@@ -35,8 +35,8 @@ router.post("/thesis/:thesisId/evaluate", async (req, res) => {
 });
 
 // GET — Latest completed assessment for a thesis
-router.get("/thesis/:thesisId/latest", (req, res) => {
-  const assessment = getLatestAssessment(req.params.thesisId);
+router.get("/thesis/:thesisId/latest", async (req, res) => {
+  const assessment = await getLatestAssessment(req.params.thesisId);
   if (!assessment) {
     return res.json(null);
   }
@@ -44,15 +44,15 @@ router.get("/thesis/:thesisId/latest", (req, res) => {
 });
 
 // GET — Full assessment history for a thesis
-router.get("/thesis/:thesisId/history", (req, res) => {
-  const history = getAssessmentHistory(req.params.thesisId);
+router.get("/thesis/:thesisId/history", async (req, res) => {
+  const history = await getAssessmentHistory(req.params.thesisId);
   res.json(history);
 });
 
 // GET — Preview thesis packet (for debugging / prompt iteration)
-router.get("/thesis/:thesisId/packet", (req, res) => {
+router.get("/thesis/:thesisId/packet", async (req, res) => {
   try {
-    const packet = buildThesisPacket(req.params.thesisId);
+    const packet = await buildThesisPacket(req.params.thesisId);
     res.json(packet);
   } catch (err) {
     res.status(404).json({ error: err.message });
