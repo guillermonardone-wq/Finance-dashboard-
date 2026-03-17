@@ -20,7 +20,7 @@ or any live table. The live engine cannot read `research_` tables.
 │         │                 │                  │          │
 │         ▼                 ▼                  ▼          │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │           research_* tables (SQLite)             │   │
+│  │           research_* tables (PostgreSQL)            │   │
 │  │  research_datasets     research_snapshots        │   │
 │  │  research_scenarios    research_runs             │   │
 │  │  research_results      research_benchmarks       │   │
@@ -75,7 +75,7 @@ src/
 
 | Boundary | Enforcement |
 |---|---|
-| Data isolation | Research tables use `research_` prefix. Research services import `getDb()` but only query `research_*` tables. |
+| Data isolation | Research tables use `research_` prefix. Research services import `getKnex()` but only query `research_*` tables. |
 | Logic reuse | Engine functions imported as pure functions. No side effects. No DB writes from engine layer. |
 | Temporal isolation | Snapshot engine freezes state at a wall-clock cutoff. Simulator sees ONLY data with `timestamp <= cutoff`. |
 | Write isolation | Research routes only write to `research_*` tables. No mutation of live `signals`, `theses`, `trades`. |

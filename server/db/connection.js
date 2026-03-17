@@ -1,8 +1,7 @@
 // ============================================================
 // DATABASE CONNECTION — Knex + PostgreSQL
 // ============================================================
-// Replaces better-sqlite3 with Knex connection pool.
-// All repo files import knex from here instead of getDb().
+// All repo files import knex from here.
 // ============================================================
 
 import Knex from "knex";

@@ -1,64 +1,55 @@
-# Database Migration Plan
+# Database State — Handoff Doc
 
 ## Current State
-- SQLite via better-sqlite3 (prototype)
-- File-backed DB in project directory
-- Raw SQL queries in thesis-repo.js and connection.js
 
-## Target State (Session 1a, Master Build v4.2)
-- PostgreSQL 16 via docker-compose.yml
-- Knex.js query builder (npm install knex pg)
-- knexfile.js with environment-based config
-- All schema as Knex migration files
-- JSONB for JSON fields, UUID for IDs
-- user_id TEXT NOT NULL DEFAULT 'default' on all user-scoped tables
-- userScoped(table, userId) helper for all queries
+- **PostgreSQL 16** via `docker-compose.yml`
+- **Knex.js** query builder for all database access
+- **Schema**: single baseline migration at `server/db/migrations/20260317000000_baseline.js`
+- **Connection**: `server/db/connection.js` exports `getKnex()`, `initDb()`, `closeDb()`, `userScoped()`
+- **Zero raw SQL** in runtime code — all queries use Knex builder syntax
+- **Zero `process.env`** outside `server/config.js`
+- **Auto-migration**: `initDb()` runs `knex.migrate.latest()` on startup
 
-## Tables Requiring user_id
-theses, signals, trade_plans, decision_log, daily_journal,
-thesis_versions, trade_plan_versions, edge_patterns,
-youtube_channels, alerts, llm_usage
+## What was migrated (Session 1a)
 
-## Shared Tables (no user_id)
-gdelt_monitoring, cot_positions, fred_data, regime_state, provider_cache
+All ~88 raw SQL operations across 20 files were converted to Knex:
 
-## New Tables to Create in Migration
-- alerts: id, user_id, type, trade_plan_id, thesis_id, message, sent, acknowledged, created_at
-- provider_health: provider_name, last_check, status, last_error, consecutive_failures
-- dead_letter_queue: failed_job_id, job_type, payload, error, retry_count, next_retry
+| Layer | Files converted |
+|-------|----------------|
+| DB repos | `thesis-repo.js`, `signal-repo.js` |
+| Routes | `market.js`, `bot.js`, `reviews.js` |
+| Services | `advisory.js`, `cache.js`, `ingestion.js`, `scheduler.js`, `fred-signals.js`, `gdelt-signals.js`, `thesis-packet.js` |
+| Bot | `pipeline.js`, `mispricing.js`, `pattern-matcher.js` |
+| Providers | `prediction-market/service.js` |
+| Entry | `index.js`, `seed-fn.js` |
 
-## Pre-Migration Checklist
-- [x] All raw SQL queries identified and documented (see RAW_SQL_INVENTORY.md — ~88 operations across 20 files)
-- [x] .env.example has DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-- [x] Centralized config exists (server/config.js) with DB section ready
-- [x] Auth middleware placeholder exists (server/middleware/auth.js)
-- [ ] Docker installed on host machine
-- [ ] docker-compose.yml created with PostgreSQL 16
-- [ ] knexfile.js created with environment-based config
+## Residual artifacts
 
-## Session 1a Handoff
+- `server/db/schema.sql` — old SQLite schema, no longer imported by any runtime code. Kept for reference only.
 
-### What is already stabilized
-- **Scoring engine** (`src/engine/scoring.js`, `classification.js`, `gates.js`, `behavioral.js`): 173 tests passing. Pure functions with no DB dependency — these survive the migration unchanged.
-- **Frontend** (`src/App.jsx`, all pages and components): No direct DB access. Talks to Express API only. Survives migration unchanged.
-- **Thesis repo** (`server/db/thesis-repo.js`): UPDATABLE_COLUMNS allowlist tested and safe. Dynamic update builder proven correct. This file gets rewritten to use Knex.
-- **Signal repo** (`server/db/signal-repo.js`): Same pattern as thesis repo. Rewrite to Knex.
-- **API routes** (`server/routes/*.js`): Thin HTTP wrappers over repo functions. Mostly survive — just swap repo imports.
+## What still uses direct Knex queries (not repo-abstracted)
 
-### What must be replaced in Session 1a
-1. `server/db/connection.js` — Replace `better-sqlite3` init with Knex connection pool
-2. `server/db/thesis-repo.js` — Rewrite all `.prepare().run/get/all()` to `knex('theses').where/insert/update`
-3. `server/db/signal-repo.js` — Same treatment
-4. `server/db/schema.sql` — Convert to Knex migration files
-5. `server/db/migrate-scoring-v2.js` and `migrate-source-types.js` — Absorb into Knex migrations
-6. All direct `getDb()` calls in routes and services (see RAW_SQL_INVENTORY.md) — Replace with Knex queries via repo layer
-7. `server/seed-fn.js` — Rewrite inserts using Knex
+Most database access goes through Knex builder calls scattered across services and routes rather than through a clean repo abstraction layer. This works fine but means:
 
-### What must NOT be carried forward from SQLite assumptions
-- **No `.prepare()` pattern** — Knex uses builder syntax, not prepared statements
-- **No `db.exec()` for DDL** — Use Knex migration files instead
-- **No `JSON.stringify()` for storage** — PostgreSQL JSONB handles objects natively
-- **No `COALESCE` update pattern** — Knex `.update()` only writes provided fields
-- **No `db.pragma()`** — PostgreSQL has its own configuration
-- **No file-based DB path** — PostgreSQL uses host/port/credentials
-- **No `.run()` return value** for changes — Knex `.update()` returns row count; use `.returning('*')` for updated row
+- Query logic lives in route handlers and services, not isolated in repo files
+- `thesis-repo.js` and `signal-repo.js` exist as repo abstractions, but other tables (reviews, bot_pipeline_runs, market_observations, etc.) are queried inline
+
+This is not a bug — it's a pragmatic choice. A future cleanup could consolidate into per-table repos if needed.
+
+## Tables (28 total)
+
+Defined in the baseline migration. Key tables:
+
+| Table | Purpose |
+|-------|---------|
+| `theses` | Investment theses with scoring fields |
+| `signals` | Raw observations from any source |
+| `reviews` | Decision reviews with checklist scores |
+| `market_observations` | Cached market data snapshots |
+| `provider_cache` | Provider response cache with TTL |
+| `provider_health` | Per-provider health tracking (Session 1b) |
+| `dead_letter_queue` | Failed job tracking with retry (Session 1b) |
+| `bot_pipeline_runs` | Bot analysis run history |
+| `bot_recommendations` | Bot-generated recommendations |
+| `llm_thesis_assessments` | LLM advisory evaluation results |
+| `prediction_market_*` | Prediction market providers, events, snapshots, links, assessments |

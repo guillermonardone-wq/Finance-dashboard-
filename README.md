@@ -18,12 +18,15 @@ A macro decision engine for tracking geopolitical and economic signals, developi
 |-------|------|
 | Frontend | React 19, Vite, Zustand, TailwindCSS |
 | Backend | Express 5, Node.js |
-| Database | SQLite (better-sqlite3, WAL mode) — prototype; Session 1a replaces with PostgreSQL + Knex.js |
+| Database | PostgreSQL 16 via Knex.js (migrated from SQLite) |
 | Testing | Vitest |
 
 ## Local setup
 
 ```bash
+# Start PostgreSQL (via Docker)
+docker compose up -d
+
 # Install dependencies
 npm install
 
@@ -39,7 +42,7 @@ npm run dev:client   # Vite dev server (port 5173, proxies /api to 3002)
 npm run dev:server   # Express API server (port 3002)
 ```
 
-The database auto-creates and seeds on first run. No manual setup required.
+The database auto-migrates (Knex migrations) and seeds on first run.
 
 ## Environment variables
 
@@ -48,14 +51,18 @@ See `.env.example` for the full list. Key variables:
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `PORT` | API server port | 3002 |
-| `DB_PATH` | SQLite database path | `./data/decision-engine.db` |
+| `DB_HOST` | PostgreSQL host | `localhost` |
+| `DB_PORT` | PostgreSQL port | `5432` |
+| `DB_NAME` | PostgreSQL database | `signalforge` |
+| `DB_USER` | PostgreSQL user | `signalforge` |
+| `DB_PASSWORD` | PostgreSQL password | `dev_password` |
+| `API_KEY` | API key for auth (empty = dev mode, no auth) | (empty) |
+| `CORS_ORIGIN` | Allowed CORS origin | `http://localhost:5173` |
 | `FRED_API_KEY` | Federal Reserve data | (disabled without key) |
 | `FINNHUB_API_KEY` | Market data, FX, news | (disabled without key) |
 | `NEWSAPI_API_KEY` | News headlines | (disabled without key) |
 | `ALPHA_VANTAGE_API_KEY` | Price data | (disabled without key) |
 | `ANTHROPIC_API_KEY` | LLM advisory evaluation | (disabled without key) |
-| `FRED_SIGNAL_THRESHOLD_MULT` | Std dev multiplier for FRED signal generation | 1.0 |
-| `GDELT_SPIKE_MULTIPLIER` | Volume spike multiplier for GDELT signals | 2.0 |
 
 All API keys are optional. The app runs fully without any external providers.
 
@@ -68,12 +75,9 @@ npm test
 
 # Watch mode
 npm run test:watch
-
-# Legacy provider/normalization tests (node:assert, not vitest)
-npm run test:legacy
 ```
 
-## What is currently implemented
+## What is implemented
 
 - Signal Inbox as landing page with Quick Add, FRED auto-signals, GDELT monitoring
 - Thesis creation (Quick Capture drafts + full form)
@@ -87,22 +91,24 @@ npm run test:legacy
 - Signal count badges in navigation
 - Provider adapters: FRED, Finnhub, Alpha Vantage, NewsAPI, World Bank Data360
 - Background scheduler for data refresh
+- PostgreSQL + Knex.js (Session 1a — complete)
+- Centralized config, API key auth, CORS hardening (Session 1b — complete)
+- Provider health monitoring + dead letter queue (Session 1b — complete)
+- System health endpoints: `/api/system/health`, `/api/system/providers`, `/api/system/dlq`
 
-## What is intentionally not implemented yet
+## What is not implemented yet
 
-- PostgreSQL / Knex (currently SQLite — DB access is isolated in `server/db/*-repo.js` for future migration). See `server/db/MIGRATION_READY.md` for the migration plan.
-- Authentication / multi-user (placeholder middleware at `server/middleware/auth.js`)
 - Trade execution tracking
-- Research lab / social features
-- Dead letter queue for failed provider calls
+- Research lab / simulation environment (see `RESEARCH_LAB_PLAN.md`)
+- Multi-user authentication
+- Notification system
 
-## Pre-build status
+## Architecture notes
 
-This prototype has been hardened for the Master Build Sequence v4.2:
-
-- Root-level ErrorBoundary catches crashes in any route
+- All database access uses Knex query builder (no raw SQL in runtime code)
+- Schema managed via Knex migration files in `server/db/migrations/`
+- All config centralized in `server/config.js` — no `process.env` outside that file
+- Provider health tracked in `provider_health` table, auto-updated on every provider call
+- Failed async jobs logged to `dead_letter_queue` with exponential backoff retry
 - 173 automated tests covering scoring, classification, gates, checklist, thesis repo safety
-- Column allowlist prevents SQL injection via dynamic updates
-- All core files formatted with Prettier
-- `server/db/RAW_SQL_INVENTORY.md` documents every raw SQL query for migration
-- `server/middleware/auth.js` and `server/config.js` scaffolded for Session 1b
+- Root-level ErrorBoundary catches crashes in any route

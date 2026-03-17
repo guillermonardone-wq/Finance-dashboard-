@@ -16,11 +16,9 @@
     "db:rollback": "knex migrate:rollback --knexfile knexfile.js --esm",
     "db:seed": "knex seed:run --knexfile knexfile.js --esm",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "test:legacy": "node tests/providers.test.js"
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
     "cors": "^2.8.6",
     "date-fns": "^4.1.0",
     "dotenv": "^17.3.1",
