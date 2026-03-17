@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { Component } from "react";
 
 /**
  * Generic React error boundary.
@@ -20,7 +20,11 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    console.error(`[ErrorBoundary${this.props.label ? `: ${this.props.label}` : ''}]`, error, info.componentStack);
+    console.error(
+      `[ErrorBoundary${this.props.label ? `: ${this.props.label}` : ""}]`,
+      error,
+      info.componentStack,
+    );
   }
 
   handleReset = () => {
@@ -29,12 +33,14 @@ export default class ErrorBoundary extends Component {
 
   render() {
     if (this.state.error) {
-      const label = this.props.label || 'this section';
+      const label = this.props.label || "this section";
       return (
         <div className="p-4 my-2 rounded border border-red-400/30 bg-red-400/5">
-          <p className="text-red-400 font-bold text-sm mb-1">Something went wrong in {label}</p>
+          <p className="text-red-400 font-bold text-sm mb-1">
+            Something went wrong in {label}
+          </p>
           <p className="text-xs text-slate-400 mb-3 font-mono break-all">
-            {this.state.error?.message || 'Unknown error'}
+            {this.state.error?.message || "Unknown error"}
           </p>
           <button
             onClick={this.handleReset}

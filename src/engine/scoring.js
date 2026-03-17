@@ -14,39 +14,54 @@
 // --- LAYER DEFINITIONS ---
 
 export const EVIDENCE_FACTORS = {
-  signal_quality:       { weight: 25, label: 'Signal Quality' },
-  signal_independence:  { weight: 25, label: 'Signal Independence' },
-  evidence_freshness:   { weight: 20, label: 'Evidence Freshness' },
-  data_reliability:     { weight: 15, label: 'Data Reliability' },
-  evidence_quantity:    { weight: 15, label: 'Evidence Quantity' },
+  signal_quality: { weight: 25, label: "Signal Quality" },
+  signal_independence: { weight: 25, label: "Signal Independence" },
+  evidence_freshness: { weight: 20, label: "Evidence Freshness" },
+  data_reliability: { weight: 15, label: "Data Reliability" },
+  evidence_quantity: { weight: 15, label: "Evidence Quantity" },
 };
 
 export const STRUCTURE_FACTORS = {
-  causal_chain_clarity:    { weight: 25, label: 'Causal Chain Clarity' },
-  internal_consistency:    { weight: 20, label: 'Internal Consistency' },
-  counter_case_robustness: { weight: 25, label: 'Counter-Case Robustness' },
-  assumption_load:         { weight: 15, label: 'Assumption Load' },
-  timing_clarity:          { weight: 15, label: 'Timing Clarity' },
+  causal_chain_clarity: { weight: 25, label: "Causal Chain Clarity" },
+  internal_consistency: { weight: 20, label: "Internal Consistency" },
+  counter_case_robustness: { weight: 25, label: "Counter-Case Robustness" },
+  assumption_load: { weight: 15, label: "Assumption Load" },
+  timing_clarity: { weight: 15, label: "Timing Clarity" },
 };
 
 export const MARKET_EDGE_FACTORS = {
-  market_awareness:               { weight: 20, label: 'Market Awareness' },
-  prediction_market_divergence:   { weight: 20, label: 'Prediction Mkt Divergence' },
-  asset_reaction_gaps:            { weight: 25, label: 'Asset Reaction Gaps' },
-  liquidity_sensitivity:          { weight: 15, label: 'Liquidity Sensitivity' },
-  catalyst_clarity:               { weight: 20, label: 'Catalyst Clarity' },
+  market_awareness: { weight: 20, label: "Market Awareness" },
+  prediction_market_divergence: {
+    weight: 20,
+    label: "Prediction Mkt Divergence",
+  },
+  asset_reaction_gaps: { weight: 25, label: "Asset Reaction Gaps" },
+  liquidity_sensitivity: { weight: 15, label: "Liquidity Sensitivity" },
+  catalyst_clarity: { weight: 20, label: "Catalyst Clarity" },
 };
 
 export const LAYER_WEIGHTS = {
-  evidence:    0.40,
-  structure:   0.35,
+  evidence: 0.4,
+  structure: 0.35,
   market_edge: 0.25,
 };
 
 export const LAYERS = {
-  evidence:    { label: 'Evidence',         factors: EVIDENCE_FACTORS,  weight: LAYER_WEIGHTS.evidence },
-  structure:   { label: 'Structural Logic', factors: STRUCTURE_FACTORS, weight: LAYER_WEIGHTS.structure },
-  market_edge: { label: 'Market Edge',      factors: MARKET_EDGE_FACTORS, weight: LAYER_WEIGHTS.market_edge },
+  evidence: {
+    label: "Evidence",
+    factors: EVIDENCE_FACTORS,
+    weight: LAYER_WEIGHTS.evidence,
+  },
+  structure: {
+    label: "Structural Logic",
+    factors: STRUCTURE_FACTORS,
+    weight: LAYER_WEIGHTS.structure,
+  },
+  market_edge: {
+    label: "Market Edge",
+    factors: MARKET_EDGE_FACTORS,
+    weight: LAYER_WEIGHTS.market_edge,
+  },
 };
 
 // All factor keys (flat)
@@ -62,53 +77,57 @@ export const ALL_FACTOR_KEYS = Object.keys(ALL_FACTORS);
 
 export const PENALTY_DEFINITIONS = [
   {
-    id: 'single_source',
-    label: 'Single Source Signals',
+    id: "single_source",
+    label: "Single Source Signals",
     maxPenalty: 8,
     detect: (scores, signals) => {
-      const sourceTypes = new Set((signals || []).map(s => s.source_type));
+      const sourceTypes = new Set((signals || []).map((s) => s.source_type));
       return sourceTypes.size <= 1 && (signals || []).length > 0;
     },
     compute: (scores, signals) => {
-      const sourceTypes = new Set((signals || []).map(s => s.source_type));
+      const sourceTypes = new Set((signals || []).map((s) => s.source_type));
       return sourceTypes.size <= 1 ? 8 : 0;
     },
-    reason: 'All signals come from a single source type. No independent corroboration.',
+    reason:
+      "All signals come from a single source type. No independent corroboration.",
   },
   {
-    id: 'circular_signals',
-    label: 'Circular Signals',
+    id: "circular_signals",
+    label: "Circular Signals",
     maxPenalty: 10,
     detect: (scores, signals) => {
       if (!signals || signals.length < 2) return false;
-      const titles = signals.map(s => s.title?.toLowerCase().trim());
+      const titles = signals.map((s) => s.title?.toLowerCase().trim());
       const unique = new Set(titles);
       return unique.size < titles.length * 0.7;
     },
     compute: (scores, signals) => {
       if (!signals || signals.length < 2) return 0;
-      const titles = signals.map(s => s.title?.toLowerCase().trim());
+      const titles = signals.map((s) => s.title?.toLowerCase().trim());
       const unique = new Set(titles);
-      const dupeRatio = 1 - (unique.size / titles.length);
+      const dupeRatio = 1 - unique.size / titles.length;
       return Math.round(dupeRatio * 10);
     },
-    reason: 'Signals appear to be circular — similar titles/sources citing each other.',
+    reason:
+      "Signals appear to be circular — similar titles/sources citing each other.",
   },
   {
-    id: 'stale_data',
-    label: 'Stale Data',
+    id: "stale_data",
+    label: "Stale Data",
     maxPenalty: 6,
-    detect: (scores) => scores.evidence_freshness != null && scores.evidence_freshness < 4,
+    detect: (scores) =>
+      scores.evidence_freshness != null && scores.evidence_freshness < 4,
     compute: (scores) => {
       if (scores.evidence_freshness == null) return 0;
       if (scores.evidence_freshness >= 4) return 0;
       return Math.round((4 - scores.evidence_freshness) * 2);
     },
-    reason: 'Supporting data is stale. Market may have moved past your evidence.',
+    reason:
+      "Supporting data is stale. Market may have moved past your evidence.",
   },
   {
-    id: 'narrative_bias',
-    label: 'Narrative Bias',
+    id: "narrative_bias",
+    label: "Narrative Bias",
     maxPenalty: 7,
     detect: (scores) => {
       const counterCase = scores.counter_case_robustness ?? 10;
@@ -120,24 +139,29 @@ export const PENALTY_DEFINITIONS = [
       if (counterCase >= 4) return 0;
       return Math.round((4 - counterCase) * 2.3);
     },
-    reason: 'Strong internal narrative but weak counter-case suggests narrative bias.',
+    reason:
+      "Strong internal narrative but weak counter-case suggests narrative bias.",
   },
   {
-    id: 'already_priced',
-    label: 'Market Already Priced',
+    id: "already_priced",
+    label: "Market Already Priced",
     maxPenalty: 8,
-    detect: (scores) => scores.market_awareness != null && scores.market_awareness >= 8 && (scores.asset_reaction_gaps ?? 5) < 3,
+    detect: (scores) =>
+      scores.market_awareness != null &&
+      scores.market_awareness >= 8 &&
+      (scores.asset_reaction_gaps ?? 5) < 3,
     compute: (scores) => {
       if ((scores.market_awareness ?? 0) < 8) return 0;
       const gaps = scores.asset_reaction_gaps ?? 5;
       if (gaps >= 3) return 0;
       return Math.round((3 - gaps) * 2.7);
     },
-    reason: 'Market is highly aware and assets already reflect the thesis. Edge may be gone.',
+    reason:
+      "Market is highly aware and assets already reflect the thesis. Edge may be gone.",
   },
   {
-    id: 'missing_invalidation',
-    label: 'Missing Invalidation',
+    id: "missing_invalidation",
+    label: "Missing Invalidation",
     maxPenalty: 10,
     detect: (scores, signals, thesis) => {
       const inv = thesis?.invalidating_indicators || [];
@@ -147,7 +171,8 @@ export const PENALTY_DEFINITIONS = [
       const inv = thesis?.invalidating_indicators || [];
       return inv.length === 0 ? 10 : 0;
     },
-    reason: 'No invalidation criteria defined. You cannot exit a thesis you cannot prove wrong.',
+    reason:
+      "No invalidation criteria defined. You cannot exit a thesis you cannot prove wrong.",
   },
 ];
 
@@ -174,7 +199,9 @@ export function scoreEvidenceFreshness(marketObs) {
   let totalDecay = 0;
 
   for (const obs of marketObs) {
-    const ageHours = (now - new Date(obs.fetched_at || obs.created_at).getTime()) / (1000 * 60 * 60);
+    const ageHours =
+      (now - new Date(obs.fetched_at || obs.created_at).getTime()) /
+      (1000 * 60 * 60);
     totalDecay += computeTimeDecay(ageHours);
   }
 
@@ -190,62 +217,78 @@ export function scoreEvidenceFreshness(marketObs) {
  * Returns { score: 0-10, clusters: [], warnings: [] }
  */
 export function detectSignalIndependence(signals) {
-  if (!signals || signals.length === 0) return { score: 0, clusters: [], warnings: [] };
-  if (signals.length === 1) return { score: 2, clusters: [], warnings: ['Single signal — no independence possible'] };
+  if (!signals || signals.length === 0)
+    return { score: 0, clusters: [], warnings: [] };
+  if (signals.length === 1)
+    return {
+      score: 2,
+      clusters: [],
+      warnings: ["Single signal — no independence possible"],
+    };
 
   const warnings = [];
 
   // Factor 1: Source type diversity (0-4 points)
-  const sourceTypes = new Set(signals.map(s => s.source_type));
+  const sourceTypes = new Set(signals.map((s) => s.source_type));
   const sourceDiversity = Math.min(4, sourceTypes.size * 1.3);
 
   // Factor 2: Category diversity (0-3 points)
-  const categories = new Set(signals.map(s => s.category));
+  const categories = new Set(signals.map((s) => s.category));
   const categoryDiversity = Math.min(3, categories.size * 0.8);
 
   // Factor 3: Temporal spread — signals arriving at different times are more independent (0-2 points)
   const timestamps = signals
-    .map(s => new Date(s.created_at).getTime())
-    .filter(t => !isNaN(t))
+    .map((s) => new Date(s.created_at).getTime())
+    .filter((t) => !isNaN(t))
     .sort((a, b) => a - b);
 
   let temporalSpread = 0;
   if (timestamps.length >= 2) {
-    const spanHours = (timestamps[timestamps.length - 1] - timestamps[0]) / (1000 * 3600);
+    const spanHours =
+      (timestamps[timestamps.length - 1] - timestamps[0]) / (1000 * 3600);
     temporalSpread = Math.min(2, spanHours / 24);
   }
 
   // Factor 4: Content similarity penalty (0 to -2 points)
-  const titles = signals.map(s => (s.title || '').toLowerCase().trim());
+  const titles = signals.map((s) => (s.title || "").toLowerCase().trim());
   const uniqueTitles = new Set(titles);
   let similarityPenalty = 0;
   if (uniqueTitles.size < titles.length * 0.6) {
     similarityPenalty = -2;
-    warnings.push('High content similarity between signals — possible echo chamber');
+    warnings.push(
+      "High content similarity between signals — possible echo chamber",
+    );
   } else if (uniqueTitles.size < titles.length * 0.8) {
     similarityPenalty = -1;
-    warnings.push('Some content overlap between signals');
+    warnings.push("Some content overlap between signals");
   }
 
   // Cluster detection: group by source_type + close timestamps
   const clusters = [];
   const clusterWindow = 4 * 3600 * 1000; // 4 hours
-  const sorted = [...signals].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const sorted = [...signals].sort(
+    (a, b) => new Date(a.created_at) - new Date(b.created_at),
+  );
 
   let currentCluster = [sorted[0]];
   for (let i = 1; i < sorted.length; i++) {
     const prev = new Date(sorted[i - 1].created_at).getTime();
     const curr = new Date(sorted[i].created_at).getTime();
-    if (sorted[i].source_type === sorted[i - 1].source_type && curr - prev < clusterWindow) {
+    if (
+      sorted[i].source_type === sorted[i - 1].source_type &&
+      curr - prev < clusterWindow
+    ) {
       currentCluster.push(sorted[i]);
     } else {
       if (currentCluster.length >= 2) {
         clusters.push({
           source_type: currentCluster[0].source_type,
           count: currentCluster.length,
-          ids: currentCluster.map(s => s.id),
+          ids: currentCluster.map((s) => s.id),
         });
-        warnings.push(`${currentCluster.length} signals clustered from ${currentCluster[0].source_type} within 4h window`);
+        warnings.push(
+          `${currentCluster.length} signals clustered from ${currentCluster[0].source_type} within 4h window`,
+        );
       }
       currentCluster = [sorted[i]];
     }
@@ -254,13 +297,18 @@ export function detectSignalIndependence(signals) {
     clusters.push({
       source_type: currentCluster[0].source_type,
       count: currentCluster.length,
-      ids: currentCluster.map(s => s.id),
+      ids: currentCluster.map((s) => s.id),
     });
   }
 
   const clusterPenalty = Math.min(0, -(clusters.length * 0.5));
 
-  const rawScore = sourceDiversity + categoryDiversity + temporalSpread + similarityPenalty + clusterPenalty;
+  const rawScore =
+    sourceDiversity +
+    categoryDiversity +
+    temporalSpread +
+    similarityPenalty +
+    clusterPenalty;
   const score = Math.max(0, Math.min(10, Math.round(rawScore * 10) / 10));
 
   return { score, clusters, warnings };
@@ -275,46 +323,75 @@ export function detectSignalIndependence(signals) {
  */
 export function compareMarketReaction(thesis, marketObs) {
   if (!thesis.affected_assets || thesis.affected_assets.length === 0) {
-    return { score: 5, gaps: [], explanation: 'No affected assets defined — cannot compare reactions' };
+    return {
+      score: 5,
+      gaps: [],
+      explanation: "No affected assets defined — cannot compare reactions",
+    };
   }
   if (!marketObs || marketObs.length === 0) {
-    return { score: 5, gaps: [], explanation: 'No market observations available for comparison' };
+    return {
+      score: 5,
+      gaps: [],
+      explanation: "No market observations available for comparison",
+    };
   }
 
   const gaps = [];
-  const affectedAssets = Array.isArray(thesis.affected_assets) ? thesis.affected_assets : [];
+  const affectedAssets = Array.isArray(thesis.affected_assets)
+    ? thesis.affected_assets
+    : [];
 
   for (const asset of affectedAssets) {
     const symbol = asset.asset || asset.symbol;
     if (!symbol) continue;
 
-    const obs = marketObs.filter(o => o.symbol && o.symbol.toLowerCase() === symbol.toLowerCase());
+    const obs = marketObs.filter(
+      (o) => o.symbol && o.symbol.toLowerCase() === symbol.toLowerCase(),
+    );
     if (obs.length === 0) {
-      gaps.push({ asset: symbol, expected: asset.direction, actual: 'no_data', aligned: false });
+      gaps.push({
+        asset: symbol,
+        expected: asset.direction,
+        actual: "no_data",
+        aligned: false,
+      });
       continue;
     }
 
     // Check price observations for direction alignment
-    const priceObs = obs.filter(o => o.observation_type === 'price' || o.observation_type === 'candle');
+    const priceObs = obs.filter(
+      (o) => o.observation_type === "price" || o.observation_type === "candle",
+    );
     if (priceObs.length >= 2) {
-      const sorted = priceObs.sort((a, b) => new Date(a.fetched_at) - new Date(b.fetched_at));
-      const firstData = typeof sorted[0].data === 'string' ? JSON.parse(sorted[0].data) : sorted[0].data;
-      const lastData = typeof sorted[sorted.length - 1].data === 'string' ? JSON.parse(sorted[sorted.length - 1].data) : sorted[sorted.length - 1].data;
+      const sorted = priceObs.sort(
+        (a, b) => new Date(a.fetched_at) - new Date(b.fetched_at),
+      );
+      const firstData =
+        typeof sorted[0].data === "string"
+          ? JSON.parse(sorted[0].data)
+          : sorted[0].data;
+      const lastData =
+        typeof sorted[sorted.length - 1].data === "string"
+          ? JSON.parse(sorted[sorted.length - 1].data)
+          : sorted[sorted.length - 1].data;
 
       const firstPrice = firstData.close || firstData.price || firstData.value;
       const lastPrice = lastData.close || lastData.price || lastData.value;
 
       if (firstPrice && lastPrice) {
         const pctChange = (lastPrice - firstPrice) / firstPrice;
-        const expectedLong = asset.direction === 'long' || asset.direction === 'up';
+        const expectedLong =
+          asset.direction === "long" || asset.direction === "up";
         const actuallyUp = pctChange > 0.005;
         const actuallyDown = pctChange < -0.005;
-        const aligned = (expectedLong && actuallyUp) || (!expectedLong && actuallyDown);
+        const aligned =
+          (expectedLong && actuallyUp) || (!expectedLong && actuallyDown);
 
         gaps.push({
           asset: symbol,
           expected: asset.direction,
-          actual: actuallyUp ? 'up' : actuallyDown ? 'down' : 'flat',
+          actual: actuallyUp ? "up" : actuallyDown ? "down" : "flat",
           pctChange: Math.round(pctChange * 10000) / 100,
           aligned,
         });
@@ -323,12 +400,21 @@ export function compareMarketReaction(thesis, marketObs) {
   }
 
   if (gaps.length === 0) {
-    return { score: 5, gaps: [], explanation: 'Insufficient data for reaction comparison' };
+    return {
+      score: 5,
+      gaps: [],
+      explanation: "Insufficient data for reaction comparison",
+    };
   }
 
-  const alignedCount = gaps.filter(g => g.aligned).length;
-  const misalignedCount = gaps.filter(g => g.aligned === false && g.actual !== 'no_data').length;
-  const score = Math.max(0, Math.min(10, Math.round((alignedCount / gaps.length) * 10)));
+  const alignedCount = gaps.filter((g) => g.aligned).length;
+  const misalignedCount = gaps.filter(
+    (g) => g.aligned === false && g.actual !== "no_data",
+  ).length;
+  const score = Math.max(
+    0,
+    Math.min(10, Math.round((alignedCount / gaps.length) * 10)),
+  );
 
   const explanation = `${alignedCount}/${gaps.length} assets reacting as expected. ${misalignedCount} misaligned.`;
 
@@ -346,9 +432,12 @@ export function matchPlaybookPatterns(thesis, signals, playbookEntries) {
     return { matches: [], bestMatch: null };
   }
 
-  const signalCategories = new Set((signals || []).map(s => s.category));
+  const signalCategories = new Set((signals || []).map((s) => s.category));
   const thesisWords = new Set(
-    `${thesis.title} ${thesis.thesis_statement}`.toLowerCase().split(/\W+/).filter(w => w.length > 3)
+    `${thesis.title} ${thesis.thesis_statement}`
+      .toLowerCase()
+      .split(/\W+/)
+      .filter((w) => w.length > 3),
   );
 
   const matches = [];
@@ -364,32 +453,46 @@ export function matchPlaybookPatterns(thesis, signals, playbookEntries) {
     }
 
     // Trigger condition match
-    const triggers = Array.isArray(entry.trigger_conditions) ? entry.trigger_conditions : [];
+    const triggers = Array.isArray(entry.trigger_conditions)
+      ? entry.trigger_conditions
+      : [];
     for (const trigger of triggers) {
-      const triggerWords = (typeof trigger === 'string' ? trigger : trigger.condition || '')
-        .toLowerCase().split(/\W+/).filter(w => w.length > 3);
-      const overlap = triggerWords.filter(w => thesisWords.has(w));
+      const triggerWords = (
+        typeof trigger === "string" ? trigger : trigger.condition || ""
+      )
+        .toLowerCase()
+        .split(/\W+/)
+        .filter((w) => w.length > 3);
+      const overlap = triggerWords.filter((w) => thesisWords.has(w));
       if (overlap.length >= 2) {
         matchScore += 2;
-        reasons.push(`Trigger keyword overlap: ${overlap.join(', ')}`);
+        reasons.push(`Trigger keyword overlap: ${overlap.join(", ")}`);
       }
     }
 
     // Asset overlap
-    const typicalAssets = Array.isArray(entry.typical_assets) ? entry.typical_assets : [];
-    const thesisAssets = (Array.isArray(thesis.affected_assets) ? thesis.affected_assets : [])
-      .map(a => (a.asset || a.symbol || '').toLowerCase());
+    const typicalAssets = Array.isArray(entry.typical_assets)
+      ? entry.typical_assets
+      : [];
+    const thesisAssets = (
+      Array.isArray(thesis.affected_assets) ? thesis.affected_assets : []
+    ).map((a) => (a.asset || a.symbol || "").toLowerCase());
     for (const ta of typicalAssets) {
-      const taStr = (typeof ta === 'string' ? ta : ta.symbol || '').toLowerCase();
-      if (thesisAssets.some(a => a.includes(taStr) || taStr.includes(a))) {
+      const taStr = (
+        typeof ta === "string" ? ta : ta.symbol || ""
+      ).toLowerCase();
+      if (thesisAssets.some((a) => a.includes(taStr) || taStr.includes(a))) {
         matchScore += 2;
         reasons.push(`Asset overlap: ${taStr}`);
       }
     }
 
     // Keyword overlap in pattern description
-    const patternWords = (entry.pattern_description || '').toLowerCase().split(/\W+/).filter(w => w.length > 3);
-    const kwOverlap = patternWords.filter(w => thesisWords.has(w));
+    const patternWords = (entry.pattern_description || "")
+      .toLowerCase()
+      .split(/\W+/)
+      .filter((w) => w.length > 3);
+    const kwOverlap = patternWords.filter((w) => thesisWords.has(w));
     if (kwOverlap.length >= 3) {
       matchScore += 1;
       reasons.push(`Pattern description overlap (${kwOverlap.length} words)`);
@@ -416,30 +519,48 @@ export function matchPlaybookPatterns(thesis, signals, playbookEntries) {
  * Returns { score: number|null, confidence: number, explanation: string }
  */
 export function scorePredictionMarketDivergence(predictionMarketAssessment) {
-  if (!predictionMarketAssessment || !predictionMarketAssessment.scoring_helpers) {
-    return { score: null, confidence: 0, explanation: 'No prediction market data available' };
+  if (
+    !predictionMarketAssessment ||
+    !predictionMarketAssessment.scoring_helpers
+  ) {
+    return {
+      score: null,
+      confidence: 0,
+      explanation: "No prediction market data available",
+    };
   }
 
   const helpers = predictionMarketAssessment.scoring_helpers;
   const qualifyingCount = helpers.qualifying_contract_count ?? 0;
 
   if (qualifyingCount < 2) {
-    return { score: null, confidence: 0, explanation: `Only ${qualifyingCount} qualifying contracts (need ≥2)` };
+    return {
+      score: null,
+      confidence: 0,
+      explanation: `Only ${qualifyingCount} qualifying contracts (need ≥2)`,
+    };
   }
 
   if (helpers.prediction_market_divergence == null) {
-    return { score: null, confidence: 0, explanation: 'No divergence data' };
+    return { score: null, confidence: 0, explanation: "No divergence data" };
   }
 
   if ((helpers.prediction_market_confidence ?? 0) <= 0.4) {
-    return { score: null, confidence: helpers.prediction_market_confidence, explanation: 'PM confidence too low (<40%)' };
+    return {
+      score: null,
+      confidence: helpers.prediction_market_confidence,
+      explanation: "PM confidence too low (<40%)",
+    };
   }
 
   // Sqrt curve with hard cap at 8
-  const rawScore = Math.min(8, Math.sqrt(helpers.prediction_market_divergence * 10) * 3);
+  const rawScore = Math.min(
+    8,
+    Math.sqrt(helpers.prediction_market_divergence * 10) * 3,
+  );
   const score = Math.round(rawScore * 10) / 10;
   const confidence = helpers.prediction_market_confidence;
-  const explanation = `PM divergence: ${score}/10 (capped at 8), confidence: ${(confidence * 100).toFixed(0)}%, ${qualifyingCount} contracts. ${helpers.prediction_market_commentary || ''}`;
+  const explanation = `PM divergence: ${score}/10 (capped at 8), confidence: ${(confidence * 100).toFixed(0)}%, ${qualifyingCount} contracts. ${helpers.prediction_market_commentary || ""}`;
 
   return { score, confidence, explanation };
 }
@@ -460,7 +581,14 @@ function computeLayerScore(factorDefs, scores) {
     const rawScore = scores[key];
     if (rawScore == null) {
       missing.push(key);
-      breakdown.push({ factor: key, label: def.label, rawScore: null, weight: def.weight, contribution: 0, status: 'missing' });
+      breakdown.push({
+        factor: key,
+        label: def.label,
+        rawScore: null,
+        weight: def.weight,
+        contribution: 0,
+        status: "missing",
+      });
       continue;
     }
 
@@ -475,7 +603,7 @@ function computeLayerScore(factorDefs, scores) {
       rawScore: clamped,
       weight: def.weight,
       contribution: Math.round(contribution) / 100,
-      status: clamped >= 7 ? 'strong' : clamped >= 4 ? 'moderate' : 'weak',
+      status: clamped >= 7 ? "strong" : clamped >= 4 ? "moderate" : "weak",
     });
   }
 
@@ -486,14 +614,29 @@ function computeLayerScore(factorDefs, scores) {
   const missingPenalty = missingWeight * 0.3;
 
   const effectiveDenominator = 100; // weights always sum to 100
-  const score = totalWeight > 0
-    ? Math.max(0, Math.round(((weightedSum / effectiveDenominator) * 10 - missingPenalty / 10) * 100) / 100)
-    : 0;
+  const score =
+    totalWeight > 0
+      ? Math.max(
+          0,
+          Math.round(
+            ((weightedSum / effectiveDenominator) * 10 - missingPenalty / 10) *
+              100,
+          ) / 100,
+        )
+      : 0;
 
   const totalFactors = Object.keys(factorDefs).length;
-  const completeness = Math.round(((totalFactors - missing.length) / totalFactors) * 100);
+  const completeness = Math.round(
+    ((totalFactors - missing.length) / totalFactors) * 100,
+  );
 
-  return { score: Math.max(0, Math.min(10, score)), breakdown, missing, missingPenalty, completeness };
+  return {
+    score: Math.max(0, Math.min(10, score)),
+    breakdown,
+    missing,
+    missingPenalty,
+    completeness,
+  };
 }
 
 // --- COMPOSITE SCORE ---
@@ -510,11 +653,11 @@ export function computeCompositeScore(scores, penalties = null) {
   const marketEdgeLayer = computeLayerScore(MARKET_EDGE_FACTORS, scores);
 
   // Weighted composite: each layer score is 0-10, scale to 0-100
-  const rawComposite = (
-    evidenceLayer.score * LAYER_WEIGHTS.evidence +
-    structureLayer.score * LAYER_WEIGHTS.structure +
-    marketEdgeLayer.score * LAYER_WEIGHTS.market_edge
-  ) * 10;
+  const rawComposite =
+    (evidenceLayer.score * LAYER_WEIGHTS.evidence +
+      structureLayer.score * LAYER_WEIGHTS.structure +
+      marketEdgeLayer.score * LAYER_WEIGHTS.market_edge) *
+    10;
 
   // Apply penalties
   let totalPenalty = 0;
@@ -528,18 +671,28 @@ export function computeCompositeScore(scores, penalties = null) {
     }
   }
 
-  const composite = Math.max(0, Math.round((rawComposite - totalPenalty) * 100) / 100);
+  const composite = Math.max(
+    0,
+    Math.round((rawComposite - totalPenalty) * 100) / 100,
+  );
 
   // Overall completeness
-  const allMissing = [...evidenceLayer.missing, ...structureLayer.missing, ...marketEdgeLayer.missing];
-  const completeness = Math.round(((ALL_FACTOR_KEYS.length - allMissing.length) / ALL_FACTOR_KEYS.length) * 100);
+  const allMissing = [
+    ...evidenceLayer.missing,
+    ...structureLayer.missing,
+    ...marketEdgeLayer.missing,
+  ];
+  const completeness = Math.round(
+    ((ALL_FACTOR_KEYS.length - allMissing.length) / ALL_FACTOR_KEYS.length) *
+      100,
+  );
 
   return {
     composite,
     rawComposite: Math.round(rawComposite * 100) / 100,
     layers: {
-      evidence:    { ...evidenceLayer, weight: LAYER_WEIGHTS.evidence },
-      structure:   { ...structureLayer, weight: LAYER_WEIGHTS.structure },
+      evidence: { ...evidenceLayer, weight: LAYER_WEIGHTS.evidence },
+      structure: { ...structureLayer, weight: LAYER_WEIGHTS.structure },
       market_edge: { ...marketEdgeLayer, weight: LAYER_WEIGHTS.market_edge },
     },
     penalties: {
@@ -563,7 +716,9 @@ export function computePenalties(scores, signals, thesis) {
 
   for (const def of PENALTY_DEFINITIONS) {
     const active = def.detect(scores, signals, thesis);
-    const value = active ? Math.min(def.maxPenalty, def.compute(scores, signals, thesis)) : 0;
+    const value = active
+      ? Math.min(def.maxPenalty, def.compute(scores, signals, thesis))
+      : 0;
     total += value;
     items.push({
       id: def.id,
@@ -584,7 +739,13 @@ export function computePenalties(scores, signals, thesis) {
  * Auto-score all factors from available thesis data.
  * Returns { scores: Object, explanations: Object, independence: Object, marketReaction: Object }
  */
-export function autoScoreThesis(thesis, signals = [], marketObs = [], predictionMarketAssessment = null, playbookEntries = []) {
+export function autoScoreThesis(
+  thesis,
+  signals = [],
+  marketObs = [],
+  predictionMarketAssessment = null,
+  playbookEntries = [],
+) {
   const auto = {};
   const explanations = {};
 
@@ -592,12 +753,25 @@ export function autoScoreThesis(thesis, signals = [], marketObs = [], prediction
 
   // Signal Quality
   if (signals.length > 0) {
-    const reliabilityScores = { verified: 9, likely: 7, unverified: 4, disputed: 2, false: 0 };
-    const avgReliability = signals.reduce((sum, s) => sum + (reliabilityScores[s.reliability] || 3), 0) / signals.length;
-    const withStrength = signals.filter(s => s.signal_strength != null);
+    const reliabilityScores = {
+      verified: 9,
+      likely: 7,
+      unverified: 4,
+      disputed: 2,
+      false: 0,
+    };
+    const avgReliability =
+      signals.reduce(
+        (sum, s) => sum + (reliabilityScores[s.reliability] || 3),
+        0,
+      ) / signals.length;
+    const withStrength = signals.filter((s) => s.signal_strength != null);
     if (withStrength.length > 0) {
-      const avgStrength = withStrength.reduce((sum, s) => sum + s.signal_strength * 10, 0) / withStrength.length;
-      auto.signal_quality = Math.round(((avgReliability + avgStrength) / 2) * 10) / 10;
+      const avgStrength =
+        withStrength.reduce((sum, s) => sum + s.signal_strength * 10, 0) /
+        withStrength.length;
+      auto.signal_quality =
+        Math.round(((avgReliability + avgStrength) / 2) * 10) / 10;
       explanations.signal_quality = `${signals.length} signals, avg reliability ${avgReliability.toFixed(1)}/10, avg strength ${avgStrength.toFixed(1)}/10`;
     } else {
       auto.signal_quality = Math.round(avgReliability * 10) / 10;
@@ -609,9 +783,10 @@ export function autoScoreThesis(thesis, signals = [], marketObs = [], prediction
   const independence = detectSignalIndependence(signals);
   if (signals.length > 0) {
     auto.signal_independence = independence.score;
-    explanations.signal_independence = independence.warnings.length > 0
-      ? `Score: ${independence.score}/10. Warnings: ${independence.warnings.join('; ')}`
-      : `Score: ${independence.score}/10. ${new Set(signals.map(s => s.source_type)).size} source types, ${new Set(signals.map(s => s.category)).size} categories`;
+    explanations.signal_independence =
+      independence.warnings.length > 0
+        ? `Score: ${independence.score}/10. Warnings: ${independence.warnings.join("; ")}`
+        : `Score: ${independence.score}/10. ${new Set(signals.map((s) => s.source_type)).size} source types, ${new Set(signals.map((s) => s.category)).size} categories`;
   }
 
   // Evidence Freshness (time-decay curve)
@@ -619,25 +794,45 @@ export function autoScoreThesis(thesis, signals = [], marketObs = [], prediction
   if (freshness != null) {
     auto.evidence_freshness = freshness;
     const now = Date.now();
-    const avgAge = marketObs.reduce((sum, obs) => {
-      return sum + (now - new Date(obs.fetched_at || obs.created_at).getTime()) / (1000 * 60 * 60);
-    }, 0) / marketObs.length;
+    const avgAge =
+      marketObs.reduce((sum, obs) => {
+        return (
+          sum +
+          (now - new Date(obs.fetched_at || obs.created_at).getTime()) /
+            (1000 * 60 * 60)
+        );
+      }, 0) / marketObs.length;
     explanations.evidence_freshness = `Time-decay score: ${freshness}/10. Avg age: ${avgAge.toFixed(1)}h across ${marketObs.length} observations`;
   }
 
   // Data Reliability
   if (signals.length > 0) {
-    const reliabilityMap = { verified: 10, likely: 7, unverified: 4, disputed: 2, false: 0 };
-    const avgReliability = signals.reduce((sum, s) => sum + (reliabilityMap[s.reliability] || 4), 0) / signals.length;
+    const reliabilityMap = {
+      verified: 10,
+      likely: 7,
+      unverified: 4,
+      disputed: 2,
+      false: 0,
+    };
+    const avgReliability =
+      signals.reduce(
+        (sum, s) => sum + (reliabilityMap[s.reliability] || 4),
+        0,
+      ) / signals.length;
     auto.data_reliability = Math.round(avgReliability * 10) / 10;
-    const verifiedCount = signals.filter(s => s.reliability === 'verified' || s.reliability === 'likely').length;
+    const verifiedCount = signals.filter(
+      (s) => s.reliability === "verified" || s.reliability === "likely",
+    ).length;
     explanations.data_reliability = `${verifiedCount}/${signals.length} signals verified/likely. Avg reliability: ${avgReliability.toFixed(1)}/10`;
   }
 
   // Evidence Quantity
   if (signals.length > 0) {
     // Diminishing returns: 3 signals = 5/10, 5 = 7, 8+ = 9, 12+ = 10
-    const qty = Math.min(10, Math.round(Math.sqrt(signals.length) * 3.2 * 10) / 10);
+    const qty = Math.min(
+      10,
+      Math.round(Math.sqrt(signals.length) * 3.2 * 10) / 10,
+    );
     auto.evidence_quantity = qty;
     explanations.evidence_quantity = `${signals.length} linked signals → quantity score ${qty}/10`;
   }
@@ -651,7 +846,8 @@ export function autoScoreThesis(thesis, signals = [], marketObs = [], prediction
     let score = 3;
     if (chain.length >= 2) score += Math.min(3, chain.length);
     if (hasAlternatives) score += 2;
-    if (thesis.key_assumptions && thesis.key_assumptions.length <= 3) score += 2;
+    if (thesis.key_assumptions && thesis.key_assumptions.length <= 3)
+      score += 2;
     auto.causal_chain_clarity = Math.min(10, score);
     explanations.causal_chain_clarity = `${chain.length} steps, ${(thesis.alternative_explanations || []).length} alternatives, ${(thesis.key_assumptions || []).length} assumptions`;
   }
@@ -659,41 +855,55 @@ export function autoScoreThesis(thesis, signals = [], marketObs = [], prediction
   // Internal Consistency
   {
     let score = 5; // base
-    const hasChain = thesis.causal_chain && (Array.isArray(thesis.causal_chain) ? thesis.causal_chain : []).length > 0;
-    const hasAssets = thesis.affected_assets && (Array.isArray(thesis.affected_assets) ? thesis.affected_assets : []).length > 0;
-    const hasTimeline = thesis.expected_timeline && (thesis.expected_timeline.start || thesis.expected_timeline.end);
-    const hasProbRange = thesis.probability_low != null && thesis.probability_high != null;
+    const hasChain =
+      thesis.causal_chain &&
+      (Array.isArray(thesis.causal_chain) ? thesis.causal_chain : []).length >
+        0;
+    const hasAssets =
+      thesis.affected_assets &&
+      (Array.isArray(thesis.affected_assets) ? thesis.affected_assets : [])
+        .length > 0;
+    const hasTimeline =
+      thesis.expected_timeline &&
+      (thesis.expected_timeline.start || thesis.expected_timeline.end);
+    const hasProbRange =
+      thesis.probability_low != null && thesis.probability_high != null;
 
     if (hasChain) score += 1;
     if (hasAssets) score += 1;
     if (hasTimeline) score += 1;
     if (hasProbRange) {
       const spread = thesis.probability_high - thesis.probability_low;
-      if (spread >= 0.15 && spread <= 0.6) score += 2; // reasonable uncertainty range
+      if (spread >= 0.15 && spread <= 0.6)
+        score += 2; // reasonable uncertainty range
       else if (spread > 0) score += 1;
     }
     auto.internal_consistency = Math.min(10, score);
-    explanations.internal_consistency = `Chain: ${hasChain ? 'yes' : 'no'}, assets: ${hasAssets ? 'yes' : 'no'}, timeline: ${hasTimeline ? 'yes' : 'no'}, prob range: ${hasProbRange ? 'yes' : 'no'}`;
+    explanations.internal_consistency = `Chain: ${hasChain ? "yes" : "no"}, assets: ${hasAssets ? "yes" : "no"}, timeline: ${hasTimeline ? "yes" : "no"}, prob range: ${hasProbRange ? "yes" : "no"}`;
   }
 
   // Counter-Case Robustness
   {
     const disconfirm = thesis.disconfirming_evidence || [];
-    const hasBearCase = thesis.strongest_bear_case && thesis.strongest_bear_case.length > 20;
-    const hasOpposite = thesis.what_would_make_opposite_stronger && thesis.what_would_make_opposite_stronger.length > 20;
+    const hasBearCase =
+      thesis.strongest_bear_case && thesis.strongest_bear_case.length > 20;
+    const hasOpposite =
+      thesis.what_would_make_opposite_stronger &&
+      thesis.what_would_make_opposite_stronger.length > 20;
     let score = 0;
     if (disconfirm.length > 0) score += Math.min(4, disconfirm.length * 1.5);
     if (hasBearCase) score += 3;
     if (hasOpposite) score += 3;
     auto.counter_case_robustness = Math.min(10, Math.round(score * 10) / 10);
-    explanations.counter_case_robustness = `${disconfirm.length} counter-evidence items, bear case: ${hasBearCase ? 'yes' : 'NO'}, opposite case: ${hasOpposite ? 'yes' : 'NO'}`;
+    explanations.counter_case_robustness = `${disconfirm.length} counter-evidence items, bear case: ${hasBearCase ? "yes" : "NO"}, opposite case: ${hasOpposite ? "yes" : "NO"}`;
   }
 
   // Assumption Load (inverted: fewer assumptions = higher score)
   {
     const assumptions = thesis.key_assumptions || [];
     let score;
-    if (assumptions.length === 0) score = 8; // no assumptions stated (might mean not assessed)
+    if (assumptions.length === 0)
+      score = 8; // no assumptions stated (might mean not assessed)
     else if (assumptions.length <= 2) score = 10;
     else if (assumptions.length <= 4) score = 7;
     else if (assumptions.length <= 6) score = 5;
@@ -717,9 +927,10 @@ export function autoScoreThesis(thesis, signals = [], marketObs = [], prediction
     }
     if (tl.basis && tl.basis.length > 10) score = Math.min(10, score + 1);
     auto.timing_clarity = score;
-    explanations.timing_clarity = tl.start && tl.end
-      ? `Window: ${tl.start} to ${tl.end}`
-      : 'Timeline not fully specified';
+    explanations.timing_clarity =
+      tl.start && tl.end
+        ? `Window: ${tl.start} to ${tl.end}`
+        : "Timeline not fully specified";
   }
 
   // --- MARKET EDGE LAYER ---
@@ -728,8 +939,16 @@ export function autoScoreThesis(thesis, signals = [], marketObs = [], prediction
   // Higher awareness = LOWER edge, but we score the quality of the analyst's awareness assessment.
   // This is typically manual, but we can hint from signal novelty.
   if (signals.length > 0) {
-    const noveltyScores = { new: 9, developing: 7, known: 4, stale: 2, unknown: 5 };
-    const avgNovelty = signals.reduce((sum, s) => sum + (noveltyScores[s.novelty] || 5), 0) / signals.length;
+    const noveltyScores = {
+      new: 9,
+      developing: 7,
+      known: 4,
+      stale: 2,
+      unknown: 5,
+    };
+    const avgNovelty =
+      signals.reduce((sum, s) => sum + (noveltyScores[s.novelty] || 5), 0) /
+      signals.length;
     auto.market_awareness = Math.round(avgNovelty * 10) / 10;
     explanations.market_awareness = `Avg signal novelty score: ${avgNovelty.toFixed(1)}/10 (new=9, known=4, stale=2)`;
   }
@@ -750,20 +969,26 @@ export function autoScoreThesis(thesis, signals = [], marketObs = [], prediction
 
   // Catalyst Clarity
   if (thesis.leading_indicators) {
-    const indicators = Array.isArray(thesis.leading_indicators) ? thesis.leading_indicators : [];
+    const indicators = Array.isArray(thesis.leading_indicators)
+      ? thesis.leading_indicators
+      : [];
     let score = 3;
     if (indicators.length >= 1) score += 2;
     if (indicators.length >= 3) score += 2;
-    if (indicators.some(i => i.target_state)) score += 2;
+    if (indicators.some((i) => i.target_state)) score += 2;
     if (thesis.expected_timeline?.basis) score += 1;
     auto.catalyst_clarity = Math.min(10, score);
-    explanations.catalyst_clarity = `${indicators.length} leading indicators, timeline basis: ${thesis.expected_timeline?.basis ? 'yes' : 'no'}`;
+    explanations.catalyst_clarity = `${indicators.length} leading indicators, timeline basis: ${thesis.expected_timeline?.basis ? "yes" : "no"}`;
   }
 
   // Liquidity Sensitivity is typically manual — skip auto-scoring
 
   // Playbook matching
-  const playbookResult = matchPlaybookPatterns(thesis, signals, playbookEntries);
+  const playbookResult = matchPlaybookPatterns(
+    thesis,
+    signals,
+    playbookEntries,
+  );
 
   return {
     scores: auto,
@@ -785,7 +1010,12 @@ export function autoScoreThesis(thesis, signals = [], marketObs = [], prediction
  *
  * Returns { level: 0-1, factors: Object, explanation: string }
  */
-export function estimateConfidence(scoreResult, signals, marketObs, predictionMarketAssessment) {
+export function estimateConfidence(
+  scoreResult,
+  signals,
+  marketObs,
+  predictionMarketAssessment,
+) {
   let confidence = 0.5; // base
   const factors = {};
 
@@ -793,7 +1023,10 @@ export function estimateConfidence(scoreResult, signals, marketObs, predictionMa
   const completeness = scoreResult.completeness / 100;
   const completenessFactor = completeness * 0.25;
   confidence += completenessFactor;
-  factors.completeness = { value: completeness, contribution: completenessFactor };
+  factors.completeness = {
+    value: completeness,
+    contribution: completenessFactor,
+  };
 
   // Factor 2: Evidence volume (0-0.15)
   const signalCount = (signals || []).length;
@@ -804,17 +1037,27 @@ export function estimateConfidence(scoreResult, signals, marketObs, predictionMa
   // Factor 3: Data recency (0-0.10)
   if (marketObs && marketObs.length > 0) {
     const now = Date.now();
-    const avgAgeHours = marketObs.reduce((sum, o) =>
-      sum + (now - new Date(o.fetched_at || o.created_at).getTime()) / 3600000, 0) / marketObs.length;
-    const recencyFactor = Math.max(0, Math.min(0.10, (1 - avgAgeHours / 72) * 0.10));
+    const avgAgeHours =
+      marketObs.reduce(
+        (sum, o) =>
+          sum +
+          (now - new Date(o.fetched_at || o.created_at).getTime()) / 3600000,
+        0,
+      ) / marketObs.length;
+    const recencyFactor = Math.max(
+      0,
+      Math.min(0.1, (1 - avgAgeHours / 72) * 0.1),
+    );
     confidence += recencyFactor;
     factors.data_recency = { value: avgAgeHours, contribution: recencyFactor };
   }
 
   // Factor 4: PM corroboration (0-0.10)
   if (predictionMarketAssessment?.scoring_helpers) {
-    const pmConf = predictionMarketAssessment.scoring_helpers.prediction_market_confidence ?? 0;
-    const pmFactor = pmConf * 0.10;
+    const pmConf =
+      predictionMarketAssessment.scoring_helpers.prediction_market_confidence ??
+      0;
+    const pmFactor = pmConf * 0.1;
     confidence += pmFactor;
     factors.pm_corroboration = { value: pmConf, contribution: pmFactor };
   }
@@ -824,15 +1067,23 @@ export function estimateConfidence(scoreResult, signals, marketObs, predictionMa
   const missingRatio = scoreResult.missing.length / ALL_FACTOR_KEYS.length;
   const missingPenalty = missingRatio * 0.15;
   confidence -= missingPenalty;
-  factors.missing_penalty = { value: missingRatio, contribution: -missingPenalty };
+  factors.missing_penalty = {
+    value: missingRatio,
+    contribution: -missingPenalty,
+  };
 
   confidence = Math.max(0, Math.min(1, Math.round(confidence * 100) / 100));
 
   let explanation;
-  if (confidence >= 0.8) explanation = 'High confidence — comprehensive data and scoring';
-  else if (confidence >= 0.6) explanation = 'Moderate confidence — reasonable evidence base';
-  else if (confidence >= 0.4) explanation = 'Low confidence — significant gaps in data or scoring';
-  else explanation = 'Very low confidence — insufficient data for reliable scoring';
+  if (confidence >= 0.8)
+    explanation = "High confidence — comprehensive data and scoring";
+  else if (confidence >= 0.6)
+    explanation = "Moderate confidence — reasonable evidence base";
+  else if (confidence >= 0.4)
+    explanation = "Low confidence — significant gaps in data or scoring";
+  else
+    explanation =
+      "Very low confidence — insufficient data for reliable scoring";
 
   return { level: confidence, factors, explanation };
 }
@@ -850,36 +1101,44 @@ export function explainScore(scoreResult) {
   lines.push(`Completeness: ${completeness}%`);
 
   if (missing.length > 0) {
-    lines.push(`WARNING: ${missing.length} factors not scored: ${missing.join(', ')}`);
+    lines.push(
+      `WARNING: ${missing.length} factors not scored: ${missing.join(", ")}`,
+    );
   }
 
-  lines.push('');
+  lines.push("");
 
   for (const [layerKey, layer] of Object.entries(layers)) {
     const layerLabel = LAYERS[layerKey]?.label || layerKey;
     const weightPct = (layer.weight * 100).toFixed(0);
-    lines.push(`${layerLabel.toUpperCase()} (${weightPct}%): ${layer.score}/10`);
+    lines.push(
+      `${layerLabel.toUpperCase()} (${weightPct}%): ${layer.score}/10`,
+    );
 
-    const scored = layer.breakdown.filter(b => b.rawScore != null);
+    const scored = layer.breakdown.filter((b) => b.rawScore != null);
     for (const b of scored) {
-      const bar = '█'.repeat(Math.round(b.rawScore)) + '░'.repeat(10 - Math.round(b.rawScore));
-      lines.push(`  ${b.label.padEnd(30)} ${bar} ${b.rawScore}/10 (w:${b.weight})`);
+      const bar =
+        "█".repeat(Math.round(b.rawScore)) +
+        "░".repeat(10 - Math.round(b.rawScore));
+      lines.push(
+        `  ${b.label.padEnd(30)} ${bar} ${b.rawScore}/10 (w:${b.weight})`,
+      );
     }
 
-    const layerMissing = layer.breakdown.filter(b => b.rawScore == null);
+    const layerMissing = layer.breakdown.filter((b) => b.rawScore == null);
     if (layerMissing.length > 0) {
-      lines.push(`  Missing: ${layerMissing.map(b => b.label).join(', ')}`);
+      lines.push(`  Missing: ${layerMissing.map((b) => b.label).join(", ")}`);
     }
-    lines.push('');
+    lines.push("");
   }
 
   if (penalties.applied.length > 0) {
-    lines.push('PENALTIES APPLIED:');
+    lines.push("PENALTIES APPLIED:");
     for (const p of penalties.applied) {
       lines.push(`  -${p.value}: ${p.label} — ${p.reason}`);
     }
     lines.push(`  Total penalty: -${penalties.total}`);
   }
 
-  return lines.join('\n');
+  return lines.join("\n");
 }

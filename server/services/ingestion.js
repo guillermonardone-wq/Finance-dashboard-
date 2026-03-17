@@ -5,10 +5,10 @@
 // caches appropriately, and stores observations in the database.
 // Source attribution is preserved at every step.
 
-import { v4 as uuidv4 } from 'uuid';
-import { getDb } from '../db/connection.js';
-import { registry } from '../providers/registry.js';
-import { cache } from './cache.js';
+import { v4 as uuidv4 } from "uuid";
+import { getDb } from "../db/connection.js";
+import { registry } from "../providers/registry.js";
+import { cache } from "./cache.js";
 
 // TTL defaults from env or fallback
 const TTL = {
@@ -23,18 +23,20 @@ export class IngestionService {
     try {
       const db = getDb();
       const id = uuidv4();
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO market_observations (id, provider, source_attribution, fetched_at, observation_type, symbol, name, data)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `,
+      ).run(
         id,
-        provider || 'unknown',
+        provider || "unknown",
         data.source_attribution || `${provider} - ${type}`,
         new Date().toISOString(),
         type,
         symbol || null,
         name || symbol || null,
-        JSON.stringify(data)
+        JSON.stringify(data),
       );
       return id;
     } catch {
@@ -45,22 +47,34 @@ export class IngestionService {
 
   // ---- PRICES ----
   async fetchPrice(symbol) {
-    const cacheKey = cache.makeKey('price', symbol);
-    return cache.getOrFetch(cacheKey, 'prices', TTL.prices, async () => {
+    const cacheKey = cache.makeKey("price", symbol);
+    return cache.getOrFetch(cacheKey, "prices", TTL.prices, async () => {
       const result = await registry.getPrice(symbol);
       if (result.success) {
-        this._storeObservation('price', symbol, symbol, result.data, result.provider);
+        this._storeObservation(
+          "price",
+          symbol,
+          symbol,
+          result.data,
+          result.provider,
+        );
       }
       return result;
     });
   }
 
-  async fetchCandles(symbol, interval = '1d', from, to) {
-    const cacheKey = cache.makeKey('candles', symbol, interval, from, to);
-    return cache.getOrFetch(cacheKey, 'prices', TTL.prices, async () => {
+  async fetchCandles(symbol, interval = "1d", from, to) {
+    const cacheKey = cache.makeKey("candles", symbol, interval, from, to);
+    return cache.getOrFetch(cacheKey, "prices", TTL.prices, async () => {
       const result = await registry.getCandles(symbol, interval, from, to);
       if (result.success) {
-        this._storeObservation('candle', symbol, `${symbol} ${interval}`, { candles: result.data }, result.provider);
+        this._storeObservation(
+          "candle",
+          symbol,
+          `${symbol} ${interval}`,
+          { candles: result.data },
+          result.provider,
+        );
       }
       return result;
     });
@@ -68,22 +82,34 @@ export class IngestionService {
 
   // ---- MACRO DATA ----
   async fetchMacroSeries(seriesId) {
-    const cacheKey = cache.makeKey('macro', seriesId);
-    return cache.getOrFetch(cacheKey, 'macro', TTL.macro, async () => {
+    const cacheKey = cache.makeKey("macro", seriesId);
+    return cache.getOrFetch(cacheKey, "macro", TTL.macro, async () => {
       const result = await registry.getMacroSeries(seriesId);
       if (result.success) {
-        this._storeObservation('macro_series', seriesId, seriesId, { points: result.data }, result.provider);
+        this._storeObservation(
+          "macro_series",
+          seriesId,
+          seriesId,
+          { points: result.data },
+          result.provider,
+        );
       }
       return result;
     });
   }
 
   async fetchMacroCalendar(from, to) {
-    const cacheKey = cache.makeKey('calendar', from, to);
-    return cache.getOrFetch(cacheKey, 'macro', TTL.macro, async () => {
+    const cacheKey = cache.makeKey("calendar", from, to);
+    return cache.getOrFetch(cacheKey, "macro", TTL.macro, async () => {
       const result = await registry.getMacroCalendar(from, to);
       if (result.success) {
-        this._storeObservation('calendar_event', null, 'Macro Calendar', { events: result.data }, result.provider);
+        this._storeObservation(
+          "calendar_event",
+          null,
+          "Macro Calendar",
+          { events: result.data },
+          result.provider,
+        );
       }
       return result;
     });
@@ -91,12 +117,18 @@ export class IngestionService {
 
   // ---- NEWS ----
   async fetchNews(query) {
-    const cacheKey = cache.makeKey('news', query || 'general');
-    return cache.getOrFetch(cacheKey, 'news', TTL.news, async () => {
+    const cacheKey = cache.makeKey("news", query || "general");
+    return cache.getOrFetch(cacheKey, "news", TTL.news, async () => {
       const result = await registry.getNews(query);
       if (result.success && result.data) {
         for (const article of result.data.slice(0, 5)) {
-          this._storeObservation('news', null, article.title, article, result.provider);
+          this._storeObservation(
+            "news",
+            null,
+            article.title,
+            article,
+            result.provider,
+          );
         }
       }
       return result;
@@ -104,8 +136,8 @@ export class IngestionService {
   }
 
   async fetchHeadlines(category) {
-    const cacheKey = cache.makeKey('headlines', category || 'business');
-    return cache.getOrFetch(cacheKey, 'news', TTL.news, async () => {
+    const cacheKey = cache.makeKey("headlines", category || "business");
+    return cache.getOrFetch(cacheKey, "news", TTL.news, async () => {
       const result = await registry.getTopHeadlines(category);
       return result;
     });
@@ -113,11 +145,17 @@ export class IngestionService {
 
   // ---- SENTIMENT ----
   async fetchSentiment(symbol) {
-    const cacheKey = cache.makeKey('sentiment', symbol);
-    return cache.getOrFetch(cacheKey, 'news', TTL.news, async () => {
+    const cacheKey = cache.makeKey("sentiment", symbol);
+    return cache.getOrFetch(cacheKey, "news", TTL.news, async () => {
       const result = await registry.getSentiment(symbol);
       if (result.success) {
-        this._storeObservation('sentiment', symbol, `${symbol} Sentiment`, result.data, result.provider);
+        this._storeObservation(
+          "sentiment",
+          symbol,
+          `${symbol} Sentiment`,
+          result.data,
+          result.provider,
+        );
       }
       return result;
     });
@@ -130,7 +168,7 @@ export class IngestionService {
       symbols.map(async (symbol) => {
         const result = await this.fetchPrice(symbol);
         results[symbol] = result;
-      })
+      }),
     );
     return results;
   }

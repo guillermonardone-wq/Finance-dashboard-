@@ -5,7 +5,7 @@
 // so we recreate the table with the updated constraint.
 // Safe to re-run — checks if migration is needed first.
 
-import { getDb } from './connection.js';
+import { getDb } from "./connection.js";
 
 export function migrateSourceTypes() {
   const db = getDb();
@@ -18,7 +18,7 @@ export function migrateSourceTypes() {
         'satellite', 'shipping', 'analyst', 'fred', 'gdelt', 'other'
       ))
     )`);
-    db.exec('DROP TABLE _migration_test_source');
+    db.exec("DROP TABLE _migration_test_source");
   } catch {
     // table creation worked, so the syntax is fine
   }
@@ -26,23 +26,25 @@ export function migrateSourceTypes() {
   // Try inserting 'fred' into the real table to see if constraint allows it
   try {
     const testStmt = db.prepare(
-      "INSERT INTO signals (id, category, title, description, source_type, status) VALUES ('__test__', 'other', 'test', 'test', 'fred', 'inbox')"
+      "INSERT INTO signals (id, category, title, description, source_type, status) VALUES ('__test__', 'other', 'test', 'test', 'fred', 'inbox')",
     );
     testStmt.run();
     // If it worked, delete the test row — constraint already allows 'fred'
     db.prepare("DELETE FROM signals WHERE id = '__test__'").run();
-    console.log('[Migration] source-types: Already up to date.');
+    console.log("[Migration] source-types: Already up to date.");
     return;
   } catch {
     // Constraint doesn't allow 'fred' — need to migrate
   }
 
-  console.log('[Migration] source-types: Rebuilding signals table with new source_type values...');
+  console.log(
+    "[Migration] source-types: Rebuilding signals table with new source_type values...",
+  );
 
-  db.exec('BEGIN TRANSACTION');
+  db.exec("BEGIN TRANSACTION");
   try {
     // Rename existing table
-    db.exec('ALTER TABLE signals RENAME TO signals_old');
+    db.exec("ALTER TABLE signals RENAME TO signals_old");
 
     // Create new table with updated constraint
     db.exec(`
@@ -85,18 +87,26 @@ export function migrateSourceTypes() {
     `);
 
     // Drop old table
-    db.exec('DROP TABLE signals_old');
+    db.exec("DROP TABLE signals_old");
 
     // Recreate indexes
-    db.exec('CREATE INDEX IF NOT EXISTS idx_signals_category ON signals(category)');
-    db.exec('CREATE INDEX IF NOT EXISTS idx_signals_status ON signals(status)');
-    db.exec('CREATE INDEX IF NOT EXISTS idx_signals_thesis ON signals(thesis_id)');
-    db.exec('CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at)');
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_signals_category ON signals(category)",
+    );
+    db.exec("CREATE INDEX IF NOT EXISTS idx_signals_status ON signals(status)");
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_signals_thesis ON signals(thesis_id)",
+    );
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at)",
+    );
 
-    db.exec('COMMIT');
-    console.log('[Migration] source-types: Done — added fred, gdelt to source_type.');
+    db.exec("COMMIT");
+    console.log(
+      "[Migration] source-types: Done — added fred, gdelt to source_type.",
+    );
   } catch (err) {
-    db.exec('ROLLBACK');
-    console.error('[Migration] source-types: FAILED —', err.message);
+    db.exec("ROLLBACK");
+    console.error("[Migration] source-types: FAILED —", err.message);
   }
 }

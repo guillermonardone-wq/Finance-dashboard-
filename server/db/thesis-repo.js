@@ -6,22 +6,38 @@
 // This creates a clean seam for future database migration.
 // ============================================================
 
-import { getDb } from './connection.js';
+import { getDb } from "./connection.js";
 
 const JSON_FIELDS = [
-  'causal_chain', 'affected_assets', 'expected_timeline', 'market_pricing_assessment',
-  'key_assumptions', 'alternative_explanations', 'leading_indicators', 'confirming_indicators',
-  'invalidating_indicators', 'coincident_indicators', 'lagging_indicators',
-  'disconfirming_evidence', 'previous_classifications', 'tags',
-  'penalty_details', 'confidence_factors', 'final_outcome',
+  "causal_chain",
+  "affected_assets",
+  "expected_timeline",
+  "market_pricing_assessment",
+  "key_assumptions",
+  "alternative_explanations",
+  "leading_indicators",
+  "confirming_indicators",
+  "invalidating_indicators",
+  "coincident_indicators",
+  "lagging_indicators",
+  "disconfirming_evidence",
+  "previous_classifications",
+  "tags",
+  "penalty_details",
+  "confidence_factors",
+  "final_outcome",
 ];
 
 function parseJsonFields(row) {
   if (!row) return row;
   const parsed = { ...row };
   for (const field of JSON_FIELDS) {
-    if (parsed[field] && typeof parsed[field] === 'string') {
-      try { parsed[field] = JSON.parse(parsed[field]); } catch { /* leave as string */ }
+    if (parsed[field] && typeof parsed[field] === "string") {
+      try {
+        parsed[field] = JSON.parse(parsed[field]);
+      } catch {
+        /* leave as string */
+      }
     }
   }
   return parsed;
@@ -29,17 +45,26 @@ function parseJsonFields(row) {
 
 export function findAll({ status, classification } = {}) {
   const db = getDb();
-  let sql = 'SELECT * FROM theses WHERE 1=1';
+  let sql = "SELECT * FROM theses WHERE 1=1";
   const params = [];
-  if (status) { sql += ' AND status = ?'; params.push(status); }
-  if (classification) { sql += ' AND classification = ?'; params.push(classification); }
-  sql += ' ORDER BY updated_at DESC';
-  return db.prepare(sql).all(...params).map(parseJsonFields);
+  if (status) {
+    sql += " AND status = ?";
+    params.push(status);
+  }
+  if (classification) {
+    sql += " AND classification = ?";
+    params.push(classification);
+  }
+  sql += " ORDER BY updated_at DESC";
+  return db
+    .prepare(sql)
+    .all(...params)
+    .map(parseJsonFields);
 }
 
 export function findById(id) {
   const db = getDb();
-  const row = db.prepare('SELECT * FROM theses WHERE id = ?').get(id);
+  const row = db.prepare("SELECT * FROM theses WHERE id = ?").get(id);
   return row ? parseJsonFields(row) : null;
 }
 
@@ -48,7 +73,8 @@ export function create(id, data) {
   const now = new Date().toISOString();
   const t = data;
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO theses (
       id, created_at, updated_at, title, thesis_statement, causal_chain,
       affected_assets, expected_timeline, probability_low, probability_high, probability_best,
@@ -60,12 +86,19 @@ export function create(id, data) {
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
-  `).run(
-    id, now, now, t.title, t.thesis_statement,
+  `,
+  ).run(
+    id,
+    now,
+    now,
+    t.title,
+    t.thesis_statement,
     JSON.stringify(t.causal_chain || []),
     JSON.stringify(t.affected_assets || []),
     JSON.stringify(t.expected_timeline || {}),
-    t.probability_low ?? 0.2, t.probability_high ?? 0.6, t.probability_best ?? 0.4,
+    t.probability_low ?? 0.2,
+    t.probability_high ?? 0.6,
+    t.probability_best ?? 0.4,
     JSON.stringify(t.market_pricing_assessment || {}),
     JSON.stringify(t.key_assumptions || []),
     JSON.stringify(t.alternative_explanations || []),
@@ -75,12 +108,12 @@ export function create(id, data) {
     JSON.stringify(t.coincident_indicators || []),
     JSON.stringify(t.lagging_indicators || []),
     JSON.stringify(t.disconfirming_evidence || []),
-    t.strongest_bear_case || '',
-    t.what_would_make_opposite_stronger || '',
+    t.strongest_bear_case || "",
+    t.what_would_make_opposite_stronger || "",
     t.early_vs_right || null,
-    t.status || 'draft',
-    t.classification || 'WATCH',
-    JSON.stringify(t.tags || [])
+    t.status || "draft",
+    t.classification || "WATCH",
+    JSON.stringify(t.tags || []),
   );
 
   return findById(id);
@@ -93,21 +126,56 @@ const JSON_COLUMNS = new Set(JSON_FIELDS);
 // Any key in `data` not in this set is silently ignored — prevents SQL injection
 // via crafted key names and ensures only known columns are written.
 const UPDATABLE_COLUMNS = new Set([
-  'title', 'thesis_statement', 'causal_chain', 'affected_assets', 'expected_timeline',
-  'probability_low', 'probability_high', 'probability_best',
-  'market_pricing_assessment', 'key_assumptions', 'alternative_explanations',
-  'leading_indicators', 'confirming_indicators', 'invalidating_indicators',
-  'coincident_indicators', 'lagging_indicators', 'disconfirming_evidence',
-  'strongest_bear_case', 'what_would_make_opposite_stronger', 'early_vs_right',
-  'score_signal_quality', 'score_signal_independence', 'score_evidence_freshness',
-  'score_data_reliability', 'score_evidence_quantity', 'score_evidence_layer',
-  'score_causal_chain_clarity', 'score_internal_consistency', 'score_counter_case_robustness',
-  'score_assumption_load', 'score_timing_clarity', 'score_structure_layer',
-  'score_market_awareness', 'score_prediction_market_divergence', 'score_asset_reaction_gaps',
-  'score_liquidity_sensitivity', 'score_catalyst_clarity', 'score_market_edge_layer',
-  'composite_score', 'penalty_total', 'penalty_details', 'confidence_level', 'confidence_factors',
-  'final_outcome', 'classification', 'classification_reason',
-  'status', 'quarantine_reason', 'quarantine_until', 'tags',
+  "title",
+  "thesis_statement",
+  "causal_chain",
+  "affected_assets",
+  "expected_timeline",
+  "probability_low",
+  "probability_high",
+  "probability_best",
+  "market_pricing_assessment",
+  "key_assumptions",
+  "alternative_explanations",
+  "leading_indicators",
+  "confirming_indicators",
+  "invalidating_indicators",
+  "coincident_indicators",
+  "lagging_indicators",
+  "disconfirming_evidence",
+  "strongest_bear_case",
+  "what_would_make_opposite_stronger",
+  "early_vs_right",
+  "score_signal_quality",
+  "score_signal_independence",
+  "score_evidence_freshness",
+  "score_data_reliability",
+  "score_evidence_quantity",
+  "score_evidence_layer",
+  "score_causal_chain_clarity",
+  "score_internal_consistency",
+  "score_counter_case_robustness",
+  "score_assumption_load",
+  "score_timing_clarity",
+  "score_structure_layer",
+  "score_market_awareness",
+  "score_prediction_market_divergence",
+  "score_asset_reaction_gaps",
+  "score_liquidity_sensitivity",
+  "score_catalyst_clarity",
+  "score_market_edge_layer",
+  "composite_score",
+  "penalty_total",
+  "penalty_details",
+  "confidence_level",
+  "confidence_factors",
+  "final_outcome",
+  "classification",
+  "classification_reason",
+  "status",
+  "quarantine_reason",
+  "quarantine_until",
+  "tags",
 ]);
 
 /**
@@ -122,7 +190,7 @@ function serializeValue(column, value) {
 
 export function update(id, data) {
   const db = getDb();
-  const existing = db.prepare('SELECT * FROM theses WHERE id = ?').get(id);
+  const existing = db.prepare("SELECT * FROM theses WHERE id = ?").get(id);
   if (!existing) return null;
 
   const now = new Date().toISOString();
@@ -131,13 +199,17 @@ export function update(id, data) {
 
   // Track classification changes
   let prevClassifications = [];
-  try { prevClassifications = JSON.parse(existing.previous_classifications || '[]'); } catch { /* keep empty */ }
+  try {
+    prevClassifications = JSON.parse(existing.previous_classifications || "[]");
+  } catch {
+    /* keep empty */
+  }
   if (data.classification && data.classification !== existing.classification) {
     prevClassifications.push({
       date: now,
       from: existing.classification,
       to: data.classification,
-      reason: data.classification_reason || 'manual change',
+      reason: data.classification_reason || "manual change",
     });
   }
 
@@ -150,13 +222,17 @@ export function update(id, data) {
   }
 
   let scoreAtApproval = existing.score_at_approval;
-  if (data.status === 'approved' && existing.status !== 'approved' && data.composite_score != null) {
+  if (
+    data.status === "approved" &&
+    existing.status !== "approved" &&
+    data.composite_score != null
+  ) {
     scoreAtApproval = data.composite_score;
   }
 
   // --- Build dynamic SET clause from provided fields ---
 
-  const setClauses = ['updated_at = ?'];
+  const setClauses = ["updated_at = ?"];
   const params = [now];
 
   for (const [key, value] of Object.entries(data)) {
@@ -166,22 +242,22 @@ export function update(id, data) {
   }
 
   // Always write derived fields
-  setClauses.push('previous_classifications = ?');
+  setClauses.push("previous_classifications = ?");
   params.push(JSON.stringify(prevClassifications));
 
-  setClauses.push('score_at_creation = ?');
+  setClauses.push("score_at_creation = ?");
   params.push(scoreAtCreation);
 
-  setClauses.push('score_at_approval = ?');
+  setClauses.push("score_at_approval = ?");
   params.push(scoreAtApproval);
 
-  setClauses.push('classification_at_creation = ?');
+  setClauses.push("classification_at_creation = ?");
   params.push(classificationAtCreation);
 
   // WHERE clause
   params.push(id);
 
-  const sql = `UPDATE theses SET ${setClauses.join(', ')} WHERE id = ?`;
+  const sql = `UPDATE theses SET ${setClauses.join(", ")} WHERE id = ?`;
   db.prepare(sql).run(...params);
 
   return findById(id);
@@ -189,5 +265,5 @@ export function update(id, data) {
 
 export function remove(id) {
   const db = getDb();
-  db.prepare('DELETE FROM theses WHERE id = ?').run(id);
+  db.prepare("DELETE FROM theses WHERE id = ?").run(id);
 }

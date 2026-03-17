@@ -13,13 +13,38 @@
 // ============================================================
 
 export const CLASSIFICATIONS = {
-  IGNORE:             { label: 'IGNORE',              color: 'slate',   minScore: 0,   maxScore: 34 },
-  WATCH:              { label: 'WATCH',               color: 'blue',    minScore: 35,  maxScore: 49 },
-  DEVELOP:            { label: 'DEVELOP THESIS',      color: 'amber',   minScore: 50,  maxScore: 64 },
-  PAPER_TRADE:        { label: 'PAPER TRADE',         color: 'purple',  minScore: 65,  maxScore: 74 },
-  SMALL_POSITION:     { label: 'SMALL POSITION',      color: 'cyan',    minScore: 75,  maxScore: 84 },
-  FULLY_QUALIFIED:    { label: 'FULLY QUALIFIED',     color: 'emerald', minScore: 85,  maxScore: 100 },
-  QUARANTINED:        { label: 'QUARANTINED',         color: 'red',     minScore: null, maxScore: null },
+  IGNORE: { label: "IGNORE", color: "slate", minScore: 0, maxScore: 34 },
+  WATCH: { label: "WATCH", color: "blue", minScore: 35, maxScore: 49 },
+  DEVELOP: {
+    label: "DEVELOP THESIS",
+    color: "amber",
+    minScore: 50,
+    maxScore: 64,
+  },
+  PAPER_TRADE: {
+    label: "PAPER TRADE",
+    color: "purple",
+    minScore: 65,
+    maxScore: 74,
+  },
+  SMALL_POSITION: {
+    label: "SMALL POSITION",
+    color: "cyan",
+    minScore: 75,
+    maxScore: 84,
+  },
+  FULLY_QUALIFIED: {
+    label: "FULLY QUALIFIED",
+    color: "emerald",
+    minScore: 85,
+    maxScore: 100,
+  },
+  QUARANTINED: {
+    label: "QUARANTINED",
+    color: "red",
+    minScore: null,
+    maxScore: null,
+  },
 };
 
 /**
@@ -29,54 +54,61 @@ export const CLASSIFICATIONS = {
 const FORCED_DOWNGRADES = [
   // Evidence layer
   {
-    factor: 'signal_quality',
+    factor: "signal_quality",
     threshold: 3,
-    maxClassification: 'WATCH',
-    reason: 'Very low signal quality caps at WATCH. The inputs are too unreliable for further action.',
+    maxClassification: "WATCH",
+    reason:
+      "Very low signal quality caps at WATCH. The inputs are too unreliable for further action.",
   },
   {
-    factor: 'signal_independence',
+    factor: "signal_independence",
     threshold: 3,
-    maxClassification: 'WATCH',
-    reason: 'Signal independence too low. All evidence may be from the same source. Diversify before acting.',
+    maxClassification: "WATCH",
+    reason:
+      "Signal independence too low. All evidence may be from the same source. Diversify before acting.",
   },
   {
-    factor: 'evidence_freshness',
+    factor: "evidence_freshness",
     threshold: 3,
-    maxClassification: 'DEVELOP',
-    reason: 'Stale evidence caps at DEVELOP. Your data may not reflect current reality.',
+    maxClassification: "DEVELOP",
+    reason:
+      "Stale evidence caps at DEVELOP. Your data may not reflect current reality.",
   },
   // Structure layer
   {
-    factor: 'causal_chain_clarity',
+    factor: "causal_chain_clarity",
     threshold: 3,
-    maxClassification: 'WATCH',
-    reason: 'Causal chain unclear. You cannot act on a thesis you cannot explain step-by-step.',
+    maxClassification: "WATCH",
+    reason:
+      "Causal chain unclear. You cannot act on a thesis you cannot explain step-by-step.",
   },
   {
-    factor: 'counter_case_robustness',
+    factor: "counter_case_robustness",
     threshold: 4,
-    maxClassification: 'DEVELOP',
-    reason: 'Weak counter-case caps at DEVELOP. You have not done the work to prove yourself wrong.',
+    maxClassification: "DEVELOP",
+    reason:
+      "Weak counter-case caps at DEVELOP. You have not done the work to prove yourself wrong.",
   },
   {
-    factor: 'timing_clarity',
+    factor: "timing_clarity",
     threshold: 4,
-    maxClassification: 'WATCH',
-    reason: 'Poor timing clarity caps at WATCH. A good idea with no timing is not tradable.',
+    maxClassification: "WATCH",
+    reason:
+      "Poor timing clarity caps at WATCH. A good idea with no timing is not tradable.",
   },
   {
-    factor: 'assumption_load',
+    factor: "assumption_load",
     threshold: 3,
-    maxClassification: 'DEVELOP',
-    reason: 'Too many assumptions. Each is a failure mode. Simplify the thesis.',
+    maxClassification: "DEVELOP",
+    reason:
+      "Too many assumptions. Each is a failure mode. Simplify the thesis.",
   },
   // Market Edge layer
   {
-    factor: 'catalyst_clarity',
+    factor: "catalyst_clarity",
     threshold: 3,
-    maxClassification: 'DEVELOP',
-    reason: 'No clear catalyst. Without a trigger, timing is guesswork.',
+    maxClassification: "DEVELOP",
+    reason: "No clear catalyst. Without a trigger, timing is guesswork.",
   },
 ];
 
@@ -86,28 +118,30 @@ const FORCED_DOWNGRADES = [
  */
 const LAYER_MINIMUMS = [
   {
-    layer: 'evidence',
+    layer: "evidence",
     threshold: 3,
-    maxClassification: 'WATCH',
-    reason: 'Evidence layer score too low. You need better data before proceeding.',
+    maxClassification: "WATCH",
+    reason:
+      "Evidence layer score too low. You need better data before proceeding.",
   },
   {
-    layer: 'structure',
+    layer: "structure",
     threshold: 3,
-    maxClassification: 'WATCH',
-    reason: 'Structural logic too weak. The thesis reasoning needs more work.',
+    maxClassification: "WATCH",
+    reason: "Structural logic too weak. The thesis reasoning needs more work.",
   },
   {
-    layer: 'evidence',
+    layer: "evidence",
     threshold: 5,
-    maxClassification: 'DEVELOP',
-    reason: 'Evidence layer below threshold for action. Keep gathering data.',
+    maxClassification: "DEVELOP",
+    reason: "Evidence layer below threshold for action. Keep gathering data.",
   },
   {
-    layer: 'structure',
+    layer: "structure",
     threshold: 5,
-    maxClassification: 'DEVELOP',
-    reason: 'Structural logic below threshold for action. Strengthen the reasoning.',
+    maxClassification: "DEVELOP",
+    reason:
+      "Structural logic below threshold for action. Strengthen the reasoning.",
   },
 ];
 
@@ -117,16 +151,29 @@ const LAYER_MINIMUMS = [
 function checkAssumptionOverload(thesis) {
   const assumptions = thesis.key_assumptions || [];
   if (assumptions.length > 7) {
-    return { capped: true, maxClassification: 'WATCH', reason: `${assumptions.length} assumptions. Each is a failure mode. Simplify the thesis.` };
+    return {
+      capped: true,
+      maxClassification: "WATCH",
+      reason: `${assumptions.length} assumptions. Each is a failure mode. Simplify the thesis.`,
+    };
   }
   if (assumptions.length > 5) {
-    return { capped: true, maxClassification: 'DEVELOP', reason: `${assumptions.length} assumptions. High dependency chain limits classification.` };
+    return {
+      capped: true,
+      maxClassification: "DEVELOP",
+      reason: `${assumptions.length} assumptions. High dependency chain limits classification.`,
+    };
   }
   return { capped: false };
 }
 
 const CLASSIFICATION_ORDER = [
-  'IGNORE', 'WATCH', 'DEVELOP', 'PAPER_TRADE', 'SMALL_POSITION', 'FULLY_QUALIFIED',
+  "IGNORE",
+  "WATCH",
+  "DEVELOP",
+  "PAPER_TRADE",
+  "SMALL_POSITION",
+  "FULLY_QUALIFIED",
 ];
 
 function classificationIndex(c) {
@@ -147,30 +194,41 @@ function lowerClassification(a, b) {
  * @param {Object} layerScores - { evidence: { score }, structure: { score }, market_edge: { score } }
  * @returns {{ classification, scoreClassification, composite, reasons, downgrades, overrideActive, meta }}
  */
-export function classifyThesis(compositeScore, factorScores, gateResult, thesis, layerScores = null) {
+export function classifyThesis(
+  compositeScore,
+  factorScores,
+  gateResult,
+  thesis,
+  layerScores = null,
+) {
   const reasons = [];
   const downgrades = [];
   let effectiveClassification = null;
 
   // Step 1: Score-based classification
-  if (compositeScore >= 85) effectiveClassification = 'FULLY_QUALIFIED';
-  else if (compositeScore >= 75) effectiveClassification = 'SMALL_POSITION';
-  else if (compositeScore >= 65) effectiveClassification = 'PAPER_TRADE';
-  else if (compositeScore >= 50) effectiveClassification = 'DEVELOP';
-  else if (compositeScore >= 35) effectiveClassification = 'WATCH';
-  else effectiveClassification = 'IGNORE';
+  if (compositeScore >= 85) effectiveClassification = "FULLY_QUALIFIED";
+  else if (compositeScore >= 75) effectiveClassification = "SMALL_POSITION";
+  else if (compositeScore >= 65) effectiveClassification = "PAPER_TRADE";
+  else if (compositeScore >= 50) effectiveClassification = "DEVELOP";
+  else if (compositeScore >= 35) effectiveClassification = "WATCH";
+  else effectiveClassification = "IGNORE";
 
   const scoreClassification = effectiveClassification;
-  reasons.push(`Score-based: ${scoreClassification} (composite: ${compositeScore})`);
+  reasons.push(
+    `Score-based: ${scoreClassification} (composite: ${compositeScore})`,
+  );
 
   // Step 2: Hard gate failures
   if (gateResult && !gateResult.passed) {
-    if (classificationIndex(effectiveClassification) > classificationIndex('DEVELOP')) {
-      effectiveClassification = 'DEVELOP';
+    if (
+      classificationIndex(effectiveClassification) >
+      classificationIndex("DEVELOP")
+    ) {
+      effectiveClassification = "DEVELOP";
       downgrades.push({
         from: scoreClassification,
-        to: 'DEVELOP',
-        reason: `Hard gate failures: ${gateResult.hardFails.map(f => f.name).join(', ')}`,
+        to: "DEVELOP",
+        reason: `Hard gate failures: ${gateResult.hardFails.map((f) => f.name).join(", ")}`,
       });
     }
   }
@@ -179,11 +237,21 @@ export function classifyThesis(compositeScore, factorScores, gateResult, thesis,
   if (layerScores) {
     for (const rule of LAYER_MINIMUMS) {
       const layerData = layerScores[rule.layer];
-      if (layerData && layerData.score != null && layerData.score < rule.threshold) {
+      if (
+        layerData &&
+        layerData.score != null &&
+        layerData.score < rule.threshold
+      ) {
         const target = rule.maxClassification;
-        if (classificationIndex(effectiveClassification) > classificationIndex(target)) {
+        if (
+          classificationIndex(effectiveClassification) >
+          classificationIndex(target)
+        ) {
           const previous = effectiveClassification;
-          effectiveClassification = lowerClassification(effectiveClassification, target);
+          effectiveClassification = lowerClassification(
+            effectiveClassification,
+            target,
+          );
           if (previous !== effectiveClassification) {
             downgrades.push({
               from: previous,
@@ -204,9 +272,16 @@ export function classifyThesis(compositeScore, factorScores, gateResult, thesis,
     const score = factorScores[rule.factor];
     if (score != null && score < rule.threshold) {
       const target = rule.maxClassification;
-      if (target === 'QUARANTINED' || classificationIndex(effectiveClassification) > classificationIndex(target)) {
+      if (
+        target === "QUARANTINED" ||
+        classificationIndex(effectiveClassification) >
+          classificationIndex(target)
+      ) {
         const previous = effectiveClassification;
-        effectiveClassification = target === 'QUARANTINED' ? 'QUARANTINED' : lowerClassification(effectiveClassification, target);
+        effectiveClassification =
+          target === "QUARANTINED"
+            ? "QUARANTINED"
+            : lowerClassification(effectiveClassification, target);
         if (previous !== effectiveClassification) {
           downgrades.push({
             from: previous,
@@ -225,7 +300,9 @@ export function classifyThesis(compositeScore, factorScores, gateResult, thesis,
   const assumptionCheck = checkAssumptionOverload(thesis);
   if (assumptionCheck.capped) {
     const target = assumptionCheck.maxClassification;
-    if (classificationIndex(effectiveClassification) > classificationIndex(target)) {
+    if (
+      classificationIndex(effectiveClassification) > classificationIndex(target)
+    ) {
       downgrades.push({
         from: effectiveClassification,
         to: target,
@@ -254,13 +331,16 @@ export function classifyThesis(compositeScore, factorScores, gateResult, thesis,
   // Step 7: Penalty-driven downgrade — if total penalties > 15, cap at DEVELOP
   // This catches heavily penalized theses that might still have decent raw scores
   if (factorScores._penaltyTotal != null && factorScores._penaltyTotal > 15) {
-    if (classificationIndex(effectiveClassification) > classificationIndex('DEVELOP')) {
+    if (
+      classificationIndex(effectiveClassification) >
+      classificationIndex("DEVELOP")
+    ) {
       downgrades.push({
         from: effectiveClassification,
-        to: 'DEVELOP',
+        to: "DEVELOP",
         reason: `High penalty total (${factorScores._penaltyTotal}) limits classification. Address penalties before acting.`,
       });
-      effectiveClassification = 'DEVELOP';
+      effectiveClassification = "DEVELOP";
     }
   }
 
@@ -271,9 +351,10 @@ export function classifyThesis(compositeScore, factorScores, gateResult, thesis,
     reasons,
     downgrades,
     overrideActive: downgrades.length > 0,
-    meta: effectiveClassification === 'QUARANTINED'
-      ? CLASSIFICATIONS.QUARANTINED
-      : CLASSIFICATIONS[effectiveClassification] || CLASSIFICATIONS.IGNORE,
+    meta:
+      effectiveClassification === "QUARANTINED"
+        ? CLASSIFICATIONS.QUARANTINED
+        : CLASSIFICATIONS[effectiveClassification] || CLASSIFICATIONS.IGNORE,
   };
 }
 
@@ -286,19 +367,21 @@ export function explainClassification(result) {
   lines.push(`Composite Score: ${result.composite}/100`);
 
   if (result.overrideActive) {
-    lines.push('');
-    lines.push('FORCED DOWNGRADES ACTIVE:');
+    lines.push("");
+    lines.push("FORCED DOWNGRADES ACTIVE:");
     lines.push(`Score alone would classify as: ${result.scoreClassification}`);
     for (const d of result.downgrades) {
       lines.push(`  ${d.from} → ${d.to}: ${d.reason}`);
     }
   }
 
-  if (result.classification === 'QUARANTINED') {
-    lines.push('');
-    lines.push('THIS THESIS IS QUARANTINED.');
-    lines.push('You are in a compromised decision state. Do not act. Review after cooling off.');
+  if (result.classification === "QUARANTINED") {
+    lines.push("");
+    lines.push("THIS THESIS IS QUARANTINED.");
+    lines.push(
+      "You are in a compromised decision state. Do not act. Review after cooling off.",
+    );
   }
 
-  return lines.join('\n');
+  return lines.join("\n");
 }

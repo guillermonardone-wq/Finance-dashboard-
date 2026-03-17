@@ -1,10 +1,10 @@
-import { BaseProvider } from '../interface.js';
+import { BaseProvider } from "../interface.js";
 
-const BASE_URL = 'https://finnhub.io/api/v1';
+const BASE_URL = "https://finnhub.io/api/v1";
 
 export class FinnhubProvider extends BaseProvider {
   constructor(config = {}) {
-    super('finnhub', config);
+    super("finnhub", config);
     this.apiKey = config.apiKey || process.env.FINNHUB_API_KEY;
   }
 
@@ -25,11 +25,13 @@ export class FinnhubProvider extends BaseProvider {
   async initialize() {
     if (!this.apiKey) {
       this.enabled = false;
-      this._setError(new Error('No API key configured'));
+      this._setError(new Error("No API key configured"));
       return;
     }
     try {
-      const res = await fetch(`${BASE_URL}/quote?symbol=AAPL&token=${this.apiKey}`);
+      const res = await fetch(
+        `${BASE_URL}/quote?symbol=AAPL&token=${this.apiKey}`,
+      );
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       this.enabled = true;
@@ -42,7 +44,9 @@ export class FinnhubProvider extends BaseProvider {
   async getPrice(symbol) {
     this._trackRequest();
     try {
-      const res = await fetch(`${BASE_URL}/quote?symbol=${encodeURIComponent(symbol)}&token=${this.apiKey}`);
+      const res = await fetch(
+        `${BASE_URL}/quote?symbol=${encodeURIComponent(symbol)}&token=${this.apiKey}`,
+      );
       const data = await res.json();
       if (!data.c) throw new Error(`No price data for ${symbol}`);
       return {
@@ -61,20 +65,32 @@ export class FinnhubProvider extends BaseProvider {
     }
   }
 
-  async getCandles(symbol, interval = '1d', from, to) {
+  async getCandles(symbol, interval = "1d", from, to) {
     this._trackRequest();
-    const resolutionMap = { '1m': '1', '5m': '5', '15m': '15', '30m': '30', '1h': '60', '1d': 'D', '1w': 'W', '1M': 'M' };
-    const resolution = resolutionMap[interval] || 'D';
+    const resolutionMap = {
+      "1m": "1",
+      "5m": "5",
+      "15m": "15",
+      "30m": "30",
+      "1h": "60",
+      "1d": "D",
+      "1w": "W",
+      "1M": "M",
+    };
+    const resolution = resolutionMap[interval] || "D";
     const now = Math.floor(Date.now() / 1000);
-    const fromTs = from ? Math.floor(new Date(from).getTime() / 1000) : now - 90 * 86400;
+    const fromTs = from
+      ? Math.floor(new Date(from).getTime() / 1000)
+      : now - 90 * 86400;
     const toTs = to ? Math.floor(new Date(to).getTime() / 1000) : now;
 
     try {
       const res = await fetch(
-        `${BASE_URL}/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${fromTs}&to=${toTs}&token=${this.apiKey}`
+        `${BASE_URL}/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${fromTs}&to=${toTs}&token=${this.apiKey}`,
       );
       const data = await res.json();
-      if (data.s === 'no_data' || !data.c) throw new Error(`No candle data for ${symbol}`);
+      if (data.s === "no_data" || !data.c)
+        throw new Error(`No candle data for ${symbol}`);
 
       return data.c.map((_, i) => ({
         symbol,
@@ -97,21 +113,23 @@ export class FinnhubProvider extends BaseProvider {
   async getMacroCalendar(from, to) {
     this._trackRequest();
     try {
-      const res = await fetch(`${BASE_URL}/calendar/economic?from=${from || ''}&to=${to || ''}&token=${this.apiKey}`);
+      const res = await fetch(
+        `${BASE_URL}/calendar/economic?from=${from || ""}&to=${to || ""}&token=${this.apiKey}`,
+      );
       const data = await res.json();
       const events = data.economicCalendar || [];
 
-      return events.map(evt => ({
+      return events.map((evt) => ({
         eventId: `${evt.event}_${evt.date}_${evt.country}`,
         title: evt.event,
         country: evt.country,
         date: evt.date,
-        time: evt.time || '',
-        impact: evt.impact === 3 ? 'high' : evt.impact === 2 ? 'medium' : 'low',
+        time: evt.time || "",
+        impact: evt.impact === 3 ? "high" : evt.impact === 2 ? "medium" : "low",
         forecast: evt.estimate,
         previous: evt.prev,
         actual: evt.actual,
-        unit: evt.unit || '',
+        unit: evt.unit || "",
         source_provider: this.name,
         source_attribution: `Finnhub - Economic Calendar`,
       }));
@@ -124,19 +142,21 @@ export class FinnhubProvider extends BaseProvider {
   async getNews(query) {
     this._trackRequest();
     try {
-      const category = query || 'general';
-      const res = await fetch(`${BASE_URL}/news?category=${encodeURIComponent(category)}&token=${this.apiKey}`);
+      const category = query || "general";
+      const res = await fetch(
+        `${BASE_URL}/news?category=${encodeURIComponent(category)}&token=${this.apiKey}`,
+      );
       const data = await res.json();
 
-      return (data || []).slice(0, 30).map(item => ({
+      return (data || []).slice(0, 30).map((item) => ({
         articleId: `finnhub_${item.id}`,
         title: item.headline,
-        description: item.summary || '',
-        content: item.summary || '',
+        description: item.summary || "",
+        content: item.summary || "",
         url: item.url,
         source: item.source,
         publishedAt: new Date(item.datetime * 1000).toISOString(),
-        symbols: item.related ? item.related.split(',') : [],
+        symbols: item.related ? item.related.split(",") : [],
         categories: [item.category],
         sentiment: null,
         source_provider: this.name,
@@ -151,7 +171,9 @@ export class FinnhubProvider extends BaseProvider {
   async getSentiment(symbol) {
     this._trackRequest();
     try {
-      const res = await fetch(`${BASE_URL}/news-sentiment?symbol=${encodeURIComponent(symbol)}&token=${this.apiKey}`);
+      const res = await fetch(
+        `${BASE_URL}/news-sentiment?symbol=${encodeURIComponent(symbol)}&token=${this.apiKey}`,
+      );
       const data = await res.json();
       return {
         symbol,
@@ -170,10 +192,12 @@ export class FinnhubProvider extends BaseProvider {
 
   // ---- FX RATES ----
   // Finnhub supports forex quotes via the /forex/rates endpoint
-  async getFxRate(base = 'USD') {
+  async getFxRate(base = "USD") {
     this._trackRequest();
     try {
-      const res = await fetch(`${BASE_URL}/forex/rates?base=${encodeURIComponent(base)}&token=${this.apiKey}`);
+      const res = await fetch(
+        `${BASE_URL}/forex/rates?base=${encodeURIComponent(base)}&token=${this.apiKey}`,
+      );
       const data = await res.json();
       if (!data.quote) throw new Error(`No FX data for base ${base}`);
       return {
@@ -181,7 +205,7 @@ export class FinnhubProvider extends BaseProvider {
         quotes: data.quote,
         timestamp: new Date().toISOString(),
         source_provider: this.name,
-        source_attribution: 'Finnhub - Forex Rates',
+        source_attribution: "Finnhub - Forex Rates",
       };
     } catch (err) {
       this._setError(err);
@@ -194,10 +218,13 @@ export class FinnhubProvider extends BaseProvider {
     this._trackRequest();
     try {
       // Finnhub uses OANDA: prefix for forex symbols
-      const fhSymbol = `OANDA:${pair.replace('/', '_')}`;
-      const res = await fetch(`${BASE_URL}/quote?symbol=${encodeURIComponent(fhSymbol)}&token=${this.apiKey}`);
+      const fhSymbol = `OANDA:${pair.replace("/", "_")}`;
+      const res = await fetch(
+        `${BASE_URL}/quote?symbol=${encodeURIComponent(fhSymbol)}&token=${this.apiKey}`,
+      );
       const data = await res.json();
-      if (!data.c || data.c === 0) throw new Error(`No quote for FX pair ${pair}`);
+      if (!data.c || data.c === 0)
+        throw new Error(`No quote for FX pair ${pair}`);
       return {
         symbol: pair,
         price: data.c,
@@ -206,9 +233,11 @@ export class FinnhubProvider extends BaseProvider {
         high: data.h || data.c,
         low: data.l || data.c,
         previousClose: data.pc || 0,
-        timestamp: data.t ? new Date(data.t * 1000).toISOString() : new Date().toISOString(),
+        timestamp: data.t
+          ? new Date(data.t * 1000).toISOString()
+          : new Date().toISOString(),
         source_provider: this.name,
-        source_attribution: 'Finnhub - Forex Quote',
+        source_attribution: "Finnhub - Forex Quote",
       };
     } catch (err) {
       this._setError(err);
@@ -217,21 +246,33 @@ export class FinnhubProvider extends BaseProvider {
   }
 
   // Get FX candles for a pair
-  async getFxCandles(pair, interval = '1d', from, to) {
+  async getFxCandles(pair, interval = "1d", from, to) {
     this._trackRequest();
-    const resolutionMap = { '1m': '1', '5m': '5', '15m': '15', '30m': '30', '1h': '60', '1d': 'D', '1w': 'W', '1M': 'M' };
-    const resolution = resolutionMap[interval] || 'D';
+    const resolutionMap = {
+      "1m": "1",
+      "5m": "5",
+      "15m": "15",
+      "30m": "30",
+      "1h": "60",
+      "1d": "D",
+      "1w": "W",
+      "1M": "M",
+    };
+    const resolution = resolutionMap[interval] || "D";
     const now = Math.floor(Date.now() / 1000);
-    const fromTs = from ? Math.floor(new Date(from).getTime() / 1000) : now - 90 * 86400;
+    const fromTs = from
+      ? Math.floor(new Date(from).getTime() / 1000)
+      : now - 90 * 86400;
     const toTs = to ? Math.floor(new Date(to).getTime() / 1000) : now;
-    const fhSymbol = `OANDA:${pair.replace('/', '_')}`;
+    const fhSymbol = `OANDA:${pair.replace("/", "_")}`;
 
     try {
       const res = await fetch(
-        `${BASE_URL}/forex/candle?symbol=${encodeURIComponent(fhSymbol)}&resolution=${resolution}&from=${fromTs}&to=${toTs}&token=${this.apiKey}`
+        `${BASE_URL}/forex/candle?symbol=${encodeURIComponent(fhSymbol)}&resolution=${resolution}&from=${fromTs}&to=${toTs}&token=${this.apiKey}`,
       );
       const data = await res.json();
-      if (data.s === 'no_data' || !data.c) throw new Error(`No FX candle data for ${pair}`);
+      if (data.s === "no_data" || !data.c)
+        throw new Error(`No FX candle data for ${pair}`);
 
       return data.c.map((_, i) => ({
         symbol: pair,
@@ -243,7 +284,7 @@ export class FinnhubProvider extends BaseProvider {
         timestamp: new Date(data.t[i] * 1000).toISOString(),
         interval,
         source_provider: this.name,
-        source_attribution: 'Finnhub - Forex Candles',
+        source_attribution: "Finnhub - Forex Candles",
       }));
     } catch (err) {
       this._setError(err);

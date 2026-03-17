@@ -11,11 +11,11 @@
 // - Alpha Vantage: Fallback market data (prices, macro)
 // - NewsAPI: News headlines
 
-import { AlphaVantageProvider } from './adapters/alpha-vantage.js';
-import { FinnhubProvider } from './adapters/finnhub.js';
-import { NewsApiProvider } from './adapters/newsapi.js';
-import { FredProvider } from './adapters/fred.js';
-import { WorldBankProvider } from './adapters/worldbank.js';
+import { AlphaVantageProvider } from "./adapters/alpha-vantage.js";
+import { FinnhubProvider } from "./adapters/finnhub.js";
+import { NewsApiProvider } from "./adapters/newsapi.js";
+import { FredProvider } from "./adapters/fred.js";
+import { WorldBankProvider } from "./adapters/worldbank.js";
 
 class ProviderRegistry {
   constructor() {
@@ -41,10 +41,10 @@ class ProviderRegistry {
         adapter._setError(err);
       }
       this.providers.set(adapter.name, adapter);
-      const keyInfo = adapter.name === 'worldbank' ? '(no key needed)' : '';
+      const keyInfo = adapter.name === "worldbank" ? "(no key needed)" : "";
       console.log(
-        `[Registry] ${adapter.name}: ${adapter.enabled ? 'ENABLED' : 'DISABLED'} ${keyInfo}` +
-        (adapter._lastError ? ` (${adapter._lastError.message})` : '')
+        `[Registry] ${adapter.name}: ${adapter.enabled ? "ENABLED" : "DISABLED"} ${keyInfo}` +
+          (adapter._lastError ? ` (${adapter._lastError.message})` : ""),
       );
     }
 
@@ -55,7 +55,7 @@ class ProviderRegistry {
   // Find all providers that support a capability
   getProvidersFor(capability) {
     return [...this.providers.values()]
-      .filter(p => p.enabled && p.capabilities[capability])
+      .filter((p) => p.enabled && p.capabilities[capability])
       .sort((a, b) => {
         const aErr = a._lastError ? 1 : 0;
         const bErr = b._lastError ? 1 : 0;
@@ -88,7 +88,9 @@ class ProviderRegistry {
           source_attribution: `${provider.name} via ${method}`,
         };
       } catch (err) {
-        console.warn(`[Registry] ${provider.name}.${method}() failed: ${err.message}`);
+        console.warn(
+          `[Registry] ${provider.name}.${method}() failed: ${err.message}`,
+        );
         if (i === providers.length - 1) {
           return {
             success: false,
@@ -104,31 +106,31 @@ class ProviderRegistry {
 
   // Convenience methods
   async getPrice(symbol) {
-    return this.execute('prices', 'getPrice', symbol);
+    return this.execute("prices", "getPrice", symbol);
   }
 
   async getCandles(symbol, interval, from, to) {
-    return this.execute('prices', 'getCandles', symbol, interval, from, to);
+    return this.execute("prices", "getCandles", symbol, interval, from, to);
   }
 
   async getMacroSeries(seriesId, from, to) {
-    return this.execute('macroSeries', 'getMacroSeries', seriesId, from, to);
+    return this.execute("macroSeries", "getMacroSeries", seriesId, from, to);
   }
 
   async getMacroCalendar(from, to) {
-    return this.execute('macroCalendar', 'getMacroCalendar', from, to);
+    return this.execute("macroCalendar", "getMacroCalendar", from, to);
   }
 
   async getNews(query, from, to) {
-    return this.execute('news', 'getNews', query, from, to);
+    return this.execute("news", "getNews", query, from, to);
   }
 
   async getTopHeadlines(category) {
-    return this.execute('news', 'getTopHeadlines', category);
+    return this.execute("news", "getTopHeadlines", category);
   }
 
   async getSentiment(symbol) {
-    return this.execute('sentiment', 'getSentiment', symbol);
+    return this.execute("sentiment", "getSentiment", symbol);
   }
 
   // Get the summary status of all providers
@@ -147,7 +149,7 @@ class ProviderRegistry {
 
   // Check if any live provider is configured
   hasAnyLiveProvider() {
-    return [...this.providers.values()].some(p => p.enabled);
+    return [...this.providers.values()].some((p) => p.enabled);
   }
 
   // Get a summary of what's configured vs missing
@@ -157,14 +159,15 @@ class ProviderRegistry {
       summary[name] = {
         enabled: provider.enabled,
         capabilities: provider.capabilities,
-        needsKey: name !== 'worldbank',
-        envVar: {
-          finnhub: 'FINNHUB_API_KEY',
-          alpha_vantage: 'ALPHA_VANTAGE_API_KEY',
-          newsapi: 'NEWSAPI_API_KEY',
-          fred: 'FRED_API_KEY',
-          worldbank: null,
-        }[name] || null,
+        needsKey: name !== "worldbank",
+        envVar:
+          {
+            finnhub: "FINNHUB_API_KEY",
+            alpha_vantage: "ALPHA_VANTAGE_API_KEY",
+            newsapi: "NEWSAPI_API_KEY",
+            fred: "FRED_API_KEY",
+            worldbank: null,
+          }[name] || null,
       };
     }
     return summary;

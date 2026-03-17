@@ -27,47 +27,122 @@
 // "World Bank Data360 — <dataset>/<indicator>".
 // ============================================================
 
-import { BaseProvider } from '../interface.js';
+import { BaseProvider } from "../interface.js";
 
-const BASE_URL = 'https://data360api.worldbank.org';
+const BASE_URL = "https://data360api.worldbank.org";
 
 // Curated default indicators for quick exploration
 // These cover the most commonly needed global macro dimensions
 const DEFAULT_INDICATORS = {
   // GDP & Growth
-  'GDP_CURRENT_USD': { dataset: 'WB_WDI', code: 'NY.GDP.MKTP.CD', name: 'GDP (current US$)', unit: 'usd' },
-  'GDP_GROWTH': { dataset: 'WB_WDI', code: 'NY.GDP.MKTP.KD.ZG', name: 'GDP Growth (annual %)', unit: 'percent' },
-  'GDP_PER_CAPITA': { dataset: 'WB_WDI', code: 'NY.GDP.PCAP.CD', name: 'GDP Per Capita (current US$)', unit: 'usd' },
+  GDP_CURRENT_USD: {
+    dataset: "WB_WDI",
+    code: "NY.GDP.MKTP.CD",
+    name: "GDP (current US$)",
+    unit: "usd",
+  },
+  GDP_GROWTH: {
+    dataset: "WB_WDI",
+    code: "NY.GDP.MKTP.KD.ZG",
+    name: "GDP Growth (annual %)",
+    unit: "percent",
+  },
+  GDP_PER_CAPITA: {
+    dataset: "WB_WDI",
+    code: "NY.GDP.PCAP.CD",
+    name: "GDP Per Capita (current US$)",
+    unit: "usd",
+  },
 
   // Inflation
-  'INFLATION_CPI': { dataset: 'WB_WDI', code: 'FP.CPI.TOTL.ZG', name: 'Inflation, Consumer Prices (annual %)', unit: 'percent' },
-  'INFLATION_GDP_DEFLATOR': { dataset: 'WB_WDI', code: 'NY.GDP.DEFL.KD.ZG', name: 'Inflation, GDP Deflator (annual %)', unit: 'percent' },
+  INFLATION_CPI: {
+    dataset: "WB_WDI",
+    code: "FP.CPI.TOTL.ZG",
+    name: "Inflation, Consumer Prices (annual %)",
+    unit: "percent",
+  },
+  INFLATION_GDP_DEFLATOR: {
+    dataset: "WB_WDI",
+    code: "NY.GDP.DEFL.KD.ZG",
+    name: "Inflation, GDP Deflator (annual %)",
+    unit: "percent",
+  },
 
   // Trade
-  'TRADE_PCT_GDP': { dataset: 'WB_WDI', code: 'NE.TRD.GNFS.ZS', name: 'Trade (% of GDP)', unit: 'percent' },
-  'CURRENT_ACCOUNT_PCT_GDP': { dataset: 'WB_WDI', code: 'BN.CAB.XOKA.GD.ZS', name: 'Current Account Balance (% of GDP)', unit: 'percent' },
+  TRADE_PCT_GDP: {
+    dataset: "WB_WDI",
+    code: "NE.TRD.GNFS.ZS",
+    name: "Trade (% of GDP)",
+    unit: "percent",
+  },
+  CURRENT_ACCOUNT_PCT_GDP: {
+    dataset: "WB_WDI",
+    code: "BN.CAB.XOKA.GD.ZS",
+    name: "Current Account Balance (% of GDP)",
+    unit: "percent",
+  },
 
   // Debt & Fiscal
-  'CENTRAL_GOVT_DEBT_PCT_GDP': { dataset: 'WB_WDI', code: 'GC.DOD.TOTL.GD.ZS', name: 'Central Govt Debt (% of GDP)', unit: 'percent' },
+  CENTRAL_GOVT_DEBT_PCT_GDP: {
+    dataset: "WB_WDI",
+    code: "GC.DOD.TOTL.GD.ZS",
+    name: "Central Govt Debt (% of GDP)",
+    unit: "percent",
+  },
 
   // Population & Development
-  'POPULATION': { dataset: 'WB_WDI', code: 'SP.POP.TOTL', name: 'Total Population', unit: 'count' },
-  'UNEMPLOYMENT': { dataset: 'WB_WDI', code: 'SL.UEM.TOTL.ZS', name: 'Unemployment (% of labor force)', unit: 'percent' },
+  POPULATION: {
+    dataset: "WB_WDI",
+    code: "SP.POP.TOTL",
+    name: "Total Population",
+    unit: "count",
+  },
+  UNEMPLOYMENT: {
+    dataset: "WB_WDI",
+    code: "SL.UEM.TOTL.ZS",
+    name: "Unemployment (% of labor force)",
+    unit: "percent",
+  },
 
   // Energy
-  'ENERGY_USE_PER_CAPITA': { dataset: 'WB_WDI', code: 'EG.USE.PCAP.KG.OE', name: 'Energy Use (kg oil equiv. per capita)', unit: 'kg_oil_equiv' },
+  ENERGY_USE_PER_CAPITA: {
+    dataset: "WB_WDI",
+    code: "EG.USE.PCAP.KG.OE",
+    name: "Energy Use (kg oil equiv. per capita)",
+    unit: "kg_oil_equiv",
+  },
 
   // Financial
-  'REAL_INTEREST_RATE': { dataset: 'WB_WDI', code: 'FR.INR.RINR', name: 'Real Interest Rate (%)', unit: 'percent' },
-  'BROAD_MONEY_PCT_GDP': { dataset: 'WB_WDI', code: 'FM.LBL.BMNY.GD.ZS', name: 'Broad Money (% of GDP)', unit: 'percent' },
+  REAL_INTEREST_RATE: {
+    dataset: "WB_WDI",
+    code: "FR.INR.RINR",
+    name: "Real Interest Rate (%)",
+    unit: "percent",
+  },
+  BROAD_MONEY_PCT_GDP: {
+    dataset: "WB_WDI",
+    code: "FM.LBL.BMNY.GD.ZS",
+    name: "Broad Money (% of GDP)",
+    unit: "percent",
+  },
 };
 
 // Major countries/regions for quick access
-const DEFAULT_COUNTRIES = ['USA', 'CHN', 'JPN', 'DEU', 'GBR', 'FRA', 'IND', 'BRA', 'WLD'];
+const DEFAULT_COUNTRIES = [
+  "USA",
+  "CHN",
+  "JPN",
+  "DEU",
+  "GBR",
+  "FRA",
+  "IND",
+  "BRA",
+  "WLD",
+];
 
 export class WorldBankProvider extends BaseProvider {
   constructor(config = {}) {
-    super('worldbank', config);
+    super("worldbank", config);
     // No API key needed — public API
   }
 
@@ -82,16 +157,19 @@ export class WorldBankProvider extends BaseProvider {
       futures: false,
       forex: false,
       crypto: false,
-      globalMacro: true,      // custom capability for global macro search
+      globalMacro: true, // custom capability for global macro search
     };
   }
 
   async initialize() {
     try {
       // Lightweight connectivity test — search for a common indicator
-      const res = await fetch(`${BASE_URL}/data360/indicators?datasetId=WB_WDI`, {
-        signal: AbortSignal.timeout(5000),
-      });
+      const res = await fetch(
+        `${BASE_URL}/data360/indicators?datasetId=WB_WDI`,
+        {
+          signal: AbortSignal.timeout(5000),
+        },
+      );
       if (!res.ok) throw new Error(`World Bank API returned ${res.status}`);
       this.enabled = true;
     } catch (err) {
@@ -107,7 +185,8 @@ export class WorldBankProvider extends BaseProvider {
     try {
       const body = {
         search: query,
-        select: 'series_description/idno,series_description/name,series_description/topics',
+        select:
+          "series_description/idno,series_description/name,series_description/topics",
         count: true,
         top: options.top || 20,
         skip: options.skip || 0,
@@ -115,8 +194,8 @@ export class WorldBankProvider extends BaseProvider {
       if (options.filter) body.filter = options.filter;
 
       const res = await fetch(`${BASE_URL}/data360/searchv2`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(10000),
       });
@@ -124,12 +203,12 @@ export class WorldBankProvider extends BaseProvider {
       const data = await res.json();
 
       return {
-        total: data['@odata.count'] || data.count || 0,
-        results: (data.value || []).map(item => ({
-          id: item.series_description?.idno || item.idno || '',
-          name: item.series_description?.name || item.name || '',
+        total: data["@odata.count"] || data.count || 0,
+        results: (data.value || []).map((item) => ({
+          id: item.series_description?.idno || item.idno || "",
+          name: item.series_description?.name || item.name || "",
           topics: item.series_description?.topics || [],
-          source_attribution: 'World Bank Data360 — Search',
+          source_attribution: "World Bank Data360 — Search",
         })),
       };
     } catch (err) {
@@ -140,12 +219,12 @@ export class WorldBankProvider extends BaseProvider {
 
   // ---- INDICATORS: list available indicators for a dataset ----
   // Uses GET /data360/indicators
-  async getIndicators(datasetId = 'WB_WDI') {
+  async getIndicators(datasetId = "WB_WDI") {
     this._trackRequest();
     try {
       const res = await fetch(
         `${BASE_URL}/data360/indicators?datasetId=${encodeURIComponent(datasetId)}`,
-        { signal: AbortSignal.timeout(10000) }
+        { signal: AbortSignal.timeout(10000) },
       );
       if (!res.ok) throw new Error(`Indicators fetch failed: ${res.status}`);
       const data = await res.json();
@@ -161,10 +240,10 @@ export class WorldBankProvider extends BaseProvider {
   async getData(indicator, countries = [], options = {}) {
     this._trackRequest();
     const mapped = DEFAULT_INDICATORS[indicator];
-    const datasetId = mapped?.dataset || options.dataset || 'WB_WDI';
+    const datasetId = mapped?.dataset || options.dataset || "WB_WDI";
     const indicatorCode = mapped?.code || indicator;
     const indicatorName = mapped?.name || indicator;
-    const unit = mapped?.unit || 'unknown';
+    const unit = mapped?.unit || "unknown";
 
     try {
       const params = new URLSearchParams({
@@ -172,32 +251,33 @@ export class WorldBankProvider extends BaseProvider {
         INDICATOR: indicatorCode,
       });
       if (countries.length > 0) {
-        params.set('REF_AREA', countries.join('+'));
+        params.set("REF_AREA", countries.join("+"));
       }
-      if (options.timePeriodFrom) params.set('timePeriodFrom', options.timePeriodFrom);
-      if (options.timePeriodTo) params.set('timePeriodTo', options.timePeriodTo);
+      if (options.timePeriodFrom)
+        params.set("timePeriodFrom", options.timePeriodFrom);
+      if (options.timePeriodTo)
+        params.set("timePeriodTo", options.timePeriodTo);
 
-      const res = await fetch(
-        `${BASE_URL}/data360/data?${params.toString()}`,
-        { signal: AbortSignal.timeout(15000) }
-      );
+      const res = await fetch(`${BASE_URL}/data360/data?${params.toString()}`, {
+        signal: AbortSignal.timeout(15000),
+      });
       if (!res.ok) throw new Error(`Data fetch failed: ${res.status}`);
       const data = await res.json();
 
       const observations = (data.value || [])
-        .filter(obs => obs.OBS_VALUE != null && obs.OBS_VALUE !== '')
-        .map(obs => ({
+        .filter((obs) => obs.OBS_VALUE != null && obs.OBS_VALUE !== "")
+        .map((obs) => ({
           seriesId: indicator,
           name: indicatorName,
           value: parseFloat(obs.OBS_VALUE),
           previousValue: null,
-          date: obs.TIME_PERIOD || '',
-          country: obs.REF_AREA || '',
+          date: obs.TIME_PERIOD || "",
+          country: obs.REF_AREA || "",
           unit,
           source_provider: this.name,
           source_attribution: `World Bank Data360 — ${datasetId}/${indicatorCode}`,
         }))
-        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
       // Fill in previousValue from sorted sequence (per country)
       const byCountry = {};
@@ -230,8 +310,8 @@ export class WorldBankProvider extends BaseProvider {
     this._trackRequest();
     try {
       const res = await fetch(`${BASE_URL}/data360/metadata`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: `&$filter=series_description/idno eq '${datasetId}_${indicatorCode}'`,
         }),
@@ -252,13 +332,15 @@ export class WorldBankProvider extends BaseProvider {
     if (!mapped) {
       // Try fetching raw indicator code against WB_WDI
       const result = await this.getData(seriesId, DEFAULT_COUNTRIES, {
-        timePeriodFrom: from, timePeriodTo: to,
+        timePeriodFrom: from,
+        timePeriodTo: to,
       });
       return result.observations;
     }
 
     const result = await this.getData(seriesId, DEFAULT_COUNTRIES, {
-      timePeriodFrom: from, timePeriodTo: to,
+      timePeriodFrom: from,
+      timePeriodTo: to,
     });
     return result.observations;
   }

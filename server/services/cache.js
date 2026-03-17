@@ -4,7 +4,7 @@
 // Uses SQLite provider_cache table for persistence.
 // Prevents redundant API calls within TTL windows.
 
-import { getDb } from '../db/connection.js';
+import { getDb } from "../db/connection.js";
 
 const DEFAULT_TTL = 300; // 5 minutes
 
@@ -19,7 +19,7 @@ export class CacheService {
 
   // Generate a deterministic cache key
   makeKey(provider, method, ...args) {
-    return `${provider}:${method}:${args.join(':')}`;
+    return `${provider}:${method}:${args.join(":")}`;
   }
 
   // Get from cache (L1 memory, then L2 SQLite)
@@ -36,14 +36,18 @@ export class CacheService {
     // L2 check
     try {
       const db = this._getDb();
-      const row = db.prepare(
-        'SELECT data, expires_at FROM provider_cache WHERE cache_key = ? AND expires_at > datetime(?)'
-      ).get(key, new Date().toISOString());
+      const row = db
+        .prepare(
+          "SELECT data, expires_at FROM provider_cache WHERE cache_key = ? AND expires_at > datetime(?)",
+        )
+        .get(key, new Date().toISOString());
 
       if (row) {
         // Promote to L1
         this.memCache.set(key, row);
-        db.prepare('UPDATE provider_cache SET hit_count = hit_count + 1 WHERE cache_key = ?').run(key);
+        db.prepare(
+          "UPDATE provider_cache SET hit_count = hit_count + 1 WHERE cache_key = ?",
+        ).run(key);
         return JSON.parse(row.data);
       }
     } catch {
@@ -65,10 +69,12 @@ export class CacheService {
     // L2
     try {
       const db = this._getDb();
-      db.prepare(`
+      db.prepare(
+        `
         INSERT OR REPLACE INTO provider_cache (cache_key, provider, data, fetched_at, expires_at, hit_count)
         VALUES (?, ?, ?, ?, ?, 0)
-      `).run(key, provider, serialized, now.toISOString(), expiresAt);
+      `,
+      ).run(key, provider, serialized, now.toISOString(), expiresAt);
     } catch {
       // DB not ready, memory cache still works
     }
@@ -95,7 +101,9 @@ export class CacheService {
     // L2
     try {
       const db = this._getDb();
-      db.prepare('DELETE FROM provider_cache WHERE expires_at < datetime(?)').run(new Date().toISOString());
+      db.prepare(
+        "DELETE FROM provider_cache WHERE expires_at < datetime(?)",
+      ).run(new Date().toISOString());
     } catch {
       // ignore
     }

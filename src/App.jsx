@@ -1,15 +1,15 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import AppShell from './components/layout/AppShell';
-import Dashboard from './pages/Dashboard';
-import SignalInbox from './pages/SignalInbox';
-import ThesisList from './pages/ThesisList';
-import ThesisBuilder from './pages/ThesisBuilder';
-import ThesisDetail from './pages/ThesisDetail';
-import MarketData from './pages/MarketData';
-import Reviews from './pages/Reviews';
-import Quarantine from './pages/Quarantine';
-import ProviderHealth from './pages/ProviderHealth';
-import BotFeed from './pages/BotFeed';
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import AppShell from "./components/layout/AppShell";
+import Dashboard from "./pages/Dashboard";
+import SignalInbox from "./pages/SignalInbox";
+import ThesisList from "./pages/ThesisList";
+import ThesisBuilder from "./pages/ThesisBuilder";
+import ThesisDetail from "./pages/ThesisDetail";
+import MarketData from "./pages/MarketData";
+import Reviews from "./pages/Reviews";
+import Quarantine from "./pages/Quarantine";
+import ProviderHealth from "./pages/ProviderHealth";
+import BotFeed from "./pages/BotFeed";
 
 export default function App() {
   return (

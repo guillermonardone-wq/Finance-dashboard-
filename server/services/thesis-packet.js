@@ -11,7 +11,7 @@
 // 2. Stored alongside the LLM response for audit/replay
 // ============================================================
 
-import { getDb } from '../db/connection.js';
+import { getDb } from "../db/connection.js";
 
 /**
  * Build a complete thesis packet for LLM evaluation.
@@ -29,12 +29,16 @@ export function buildThesisPacket(thesisId, options = {}) {
   } = options;
 
   // --- Core thesis ---
-  const thesis = db.prepare('SELECT * FROM theses WHERE id = ?').get(thesisId);
+  const thesis = db.prepare("SELECT * FROM theses WHERE id = ?").get(thesisId);
   if (!thesis) throw new Error(`Thesis not found: ${thesisId}`);
 
   const parseJson = (val) => {
-    if (!val || typeof val !== 'string') return val;
-    try { return JSON.parse(val); } catch { return val; }
+    if (!val || typeof val !== "string") return val;
+    try {
+      return JSON.parse(val);
+    } catch {
+      return val;
+    }
   };
 
   const thesisData = {
@@ -76,9 +80,11 @@ export function buildThesisPacket(thesisId, options = {}) {
   };
 
   // --- Linked signals ---
-  const signals = db.prepare(
-    'SELECT id, title, description, category, source_type, source_attribution, novelty, reliability, signal_strength, created_at FROM signals WHERE thesis_id = ? AND status = ?'
-  ).all(thesisId, 'linked');
+  const signals = db
+    .prepare(
+      "SELECT id, title, description, category, source_type, source_attribution, novelty, reliability, signal_strength, created_at FROM signals WHERE thesis_id = ? AND status = ?",
+    )
+    .all(thesisId, "linked");
 
   // --- Deterministic score snapshot ---
   const deterministicScores = {
@@ -111,36 +117,43 @@ export function buildThesisPacket(thesisId, options = {}) {
   // --- Market observations ---
   let marketContext = [];
   if (includeMarketObs) {
-    marketContext = db.prepare(
-      `SELECT observation_type, symbol, name, data, provider, source_attribution, fetched_at
+    marketContext = db
+      .prepare(
+        `SELECT observation_type, symbol, name, data, provider, source_attribution, fetched_at
        FROM market_observations
        WHERE thesis_id = ?
        ORDER BY fetched_at DESC
-       LIMIT 20`
-    ).all(thesisId).map(obs => ({
-      ...obs,
-      data: parseJson(obs.data),
-    }));
+       LIMIT 20`,
+      )
+      .all(thesisId)
+      .map((obs) => ({
+        ...obs,
+        data: parseJson(obs.data),
+      }));
   }
 
   // --- Prediction market context ---
   let predictionMarketContext = null;
   if (includePredictionMarkets) {
-    const links = db.prepare(
-      `SELECT tpl.*, pme.title as event_title, pme.description as event_description,
+    const links = db
+      .prepare(
+        `SELECT tpl.*, pme.title as event_title, pme.description as event_description,
               pme.status as event_status, pme.category as event_category
        FROM thesis_prediction_links tpl
        JOIN prediction_market_events pme ON tpl.prediction_market_event_id = pme.id
-       WHERE tpl.thesis_id = ?`
-    ).all(thesisId);
+       WHERE tpl.thesis_id = ?`,
+      )
+      .all(thesisId);
 
-    const latestAssessment = db.prepare(
-      'SELECT * FROM prediction_market_assessments WHERE thesis_id = ? ORDER BY assessed_at DESC LIMIT 1'
-    ).get(thesisId);
+    const latestAssessment = db
+      .prepare(
+        "SELECT * FROM prediction_market_assessments WHERE thesis_id = ? ORDER BY assessed_at DESC LIMIT 1",
+      )
+      .get(thesisId);
 
     if (links.length > 0 || latestAssessment) {
       predictionMarketContext = {
-        linked_contracts: links.map(l => ({
+        linked_contracts: links.map((l) => ({
           event_title: l.event_title,
           event_category: l.event_category,
           link_type: l.link_type,
@@ -149,15 +162,21 @@ export function buildThesisPacket(thesisId, options = {}) {
           wording_mismatch: !!l.wording_mismatch_flag,
           rationale: l.rationale,
         })),
-        latest_assessment: latestAssessment ? {
-          assessed_at: latestAssessment.assessed_at,
-          thesis_probability: { low: latestAssessment.thesis_probability_low, high: latestAssessment.thesis_probability_high },
-          pm_implied_probability: latestAssessment.prediction_market_implied_probability,
-          divergence_score: latestAssessment.divergence_score,
-          consensus_state: latestAssessment.consensus_state,
-          wording_warning: !!latestAssessment.wording_warning,
-          liquidity_warning: !!latestAssessment.liquidity_warning,
-        } : null,
+        latest_assessment: latestAssessment
+          ? {
+              assessed_at: latestAssessment.assessed_at,
+              thesis_probability: {
+                low: latestAssessment.thesis_probability_low,
+                high: latestAssessment.thesis_probability_high,
+              },
+              pm_implied_probability:
+                latestAssessment.prediction_market_implied_probability,
+              divergence_score: latestAssessment.divergence_score,
+              consensus_state: latestAssessment.consensus_state,
+              wording_warning: !!latestAssessment.wording_warning,
+              liquidity_warning: !!latestAssessment.liquidity_warning,
+            }
+          : null,
       };
     }
   }
@@ -165,21 +184,29 @@ export function buildThesisPacket(thesisId, options = {}) {
   // --- Playbook matches ---
   let playbookMatches = [];
   if (includePlaybook) {
-    const entries = db.prepare(
-      "SELECT id, title, category, pattern_description, trigger_conditions, typical_assets, success_rate_estimate FROM playbook_entries WHERE status = 'active'"
-    ).all();
+    const entries = db
+      .prepare(
+        "SELECT id, title, category, pattern_description, trigger_conditions, typical_assets, success_rate_estimate FROM playbook_entries WHERE status = 'active'",
+      )
+      .all();
 
     // Simple keyword overlap for packet — full matching is done by engine
     const thesisWords = new Set(
-      `${thesis.title} ${thesis.thesis_statement}`.toLowerCase().split(/\W+/).filter(w => w.length > 3)
+      `${thesis.title} ${thesis.thesis_statement}`
+        .toLowerCase()
+        .split(/\W+/)
+        .filter((w) => w.length > 3),
     );
-    const signalCategories = new Set(signals.map(s => s.category));
+    const signalCategories = new Set(signals.map((s) => s.category));
 
     for (const entry of entries) {
       const triggers = parseJson(entry.trigger_conditions) || [];
       const categoryMatch = signalCategories.has(entry.category);
-      const patternWords = (entry.pattern_description || '').toLowerCase().split(/\W+/).filter(w => w.length > 3);
-      const overlap = patternWords.filter(w => thesisWords.has(w)).length;
+      const patternWords = (entry.pattern_description || "")
+        .toLowerCase()
+        .split(/\W+/)
+        .filter((w) => w.length > 3);
+      const overlap = patternWords.filter((w) => thesisWords.has(w)).length;
 
       if (categoryMatch || overlap >= 3) {
         playbookMatches.push({
@@ -187,7 +214,9 @@ export function buildThesisPacket(thesisId, options = {}) {
           category: entry.category,
           pattern_description: entry.pattern_description,
           success_rate: entry.success_rate_estimate,
-          match_reason: categoryMatch ? 'category match' : `keyword overlap (${overlap})`,
+          match_reason: categoryMatch
+            ? "category match"
+            : `keyword overlap (${overlap})`,
         });
       }
     }
@@ -195,10 +224,10 @@ export function buildThesisPacket(thesisId, options = {}) {
 
   // --- Assemble packet ---
   const packet = {
-    packet_version: '1.0',
+    packet_version: "1.0",
     generated_at: new Date().toISOString(),
     thesis: thesisData,
-    signals: signals.map(s => ({
+    signals: signals.map((s) => ({
       title: s.title,
       description: s.description,
       category: s.category,
@@ -214,8 +243,8 @@ export function buildThesisPacket(thesisId, options = {}) {
     prediction_market_context: predictionMarketContext,
     playbook_matches: playbookMatches,
     signal_count: signals.length,
-    signal_source_types: [...new Set(signals.map(s => s.source_type))],
-    signal_categories: [...new Set(signals.map(s => s.category))],
+    signal_source_types: [...new Set(signals.map((s) => s.source_type))],
+    signal_categories: [...new Set(signals.map((s) => s.category))],
   };
 
   return packet;

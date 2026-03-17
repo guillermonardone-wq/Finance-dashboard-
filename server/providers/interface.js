@@ -20,15 +20,15 @@ export class BaseProvider {
   // Override in subclass: declare what this provider can do
   get capabilities() {
     return {
-      prices: false,        // spot prices, candles, OHLCV
-      macroSeries: false,   // GDP, CPI, rates, yield curves
-      macroCalendar: false,  // upcoming economic events
-      news: false,          // news articles, headlines
-      sentiment: false,     // market sentiment scores
-      options: false,       // options chains, flow, greeks
-      futures: false,       // futures curves, COT data
-      forex: false,         // FX rates
-      crypto: false,        // crypto prices
+      prices: false, // spot prices, candles, OHLCV
+      macroSeries: false, // GDP, CPI, rates, yield curves
+      macroCalendar: false, // upcoming economic events
+      news: false, // news articles, headlines
+      sentiment: false, // market sentiment scores
+      options: false, // options chains, flow, greeks
+      futures: false, // futures curves, COT data
+      forex: false, // FX rates
+      crypto: false, // crypto prices
     };
   }
 
@@ -108,67 +108,71 @@ export class BaseProvider {
 export const NormalizedShapes = {
   // Price quote
   price: {
-    symbol: '',            // e.g., "AAPL"
+    symbol: "", // e.g., "AAPL"
     price: 0,
     change: 0,
     changePercent: 0,
     volume: 0,
-    timestamp: '',         // ISO 8601
-    source_provider: '',   // adapter name
-    source_attribution: '', // human-readable
+    timestamp: "", // ISO 8601
+    source_provider: "", // adapter name
+    source_attribution: "", // human-readable
   },
 
   // OHLCV candle
   candle: {
-    symbol: '',
-    open: 0, high: 0, low: 0, close: 0, volume: 0,
-    timestamp: '',
-    interval: '',          // '1m', '5m', '1h', '1d', '1w'
-    source_provider: '',
-    source_attribution: '',
+    symbol: "",
+    open: 0,
+    high: 0,
+    low: 0,
+    close: 0,
+    volume: 0,
+    timestamp: "",
+    interval: "", // '1m', '5m', '1h', '1d', '1w'
+    source_provider: "",
+    source_attribution: "",
   },
 
   // Macro economic series data point
   macroDataPoint: {
-    seriesId: '',          // e.g., "US_CPI_YOY"
-    name: '',              // e.g., "US CPI Year-over-Year"
+    seriesId: "", // e.g., "US_CPI_YOY"
+    name: "", // e.g., "US CPI Year-over-Year"
     value: 0,
     previousValue: null,
-    date: '',
-    unit: '',              // 'percent', 'index', 'billions_usd', etc.
-    source_provider: '',
-    source_attribution: '',
+    date: "",
+    unit: "", // 'percent', 'index', 'billions_usd', etc.
+    source_provider: "",
+    source_attribution: "",
   },
 
   // Macro calendar event
   macroEvent: {
-    eventId: '',
-    title: '',             // e.g., "FOMC Rate Decision"
-    country: '',
-    date: '',
-    time: '',
-    impact: '',            // 'high', 'medium', 'low'
+    eventId: "",
+    title: "", // e.g., "FOMC Rate Decision"
+    country: "",
+    date: "",
+    time: "",
+    impact: "", // 'high', 'medium', 'low'
     forecast: null,
     previous: null,
     actual: null,
-    unit: '',
-    source_provider: '',
-    source_attribution: '',
+    unit: "",
+    source_provider: "",
+    source_attribution: "",
   },
 
   // News article
   newsArticle: {
-    articleId: '',
-    title: '',
-    description: '',
-    content: '',
-    url: '',
-    source: '',            // publisher name
-    publishedAt: '',
-    symbols: [],           // related tickers
-    categories: [],        // tags
-    sentiment: null,       // -1 to 1 if available
-    source_provider: '',
-    source_attribution: '',
+    articleId: "",
+    title: "",
+    description: "",
+    content: "",
+    url: "",
+    source: "", // publisher name
+    publishedAt: "",
+    symbols: [], // related tickers
+    categories: [], // tags
+    sentiment: null, // -1 to 1 if available
+    source_provider: "",
+    source_attribution: "",
   },
 };

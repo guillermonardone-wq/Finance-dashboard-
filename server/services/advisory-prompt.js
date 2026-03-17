@@ -5,7 +5,7 @@
 // so we can compare quality across prompt iterations.
 // ============================================================
 
-export const PROMPT_VERSION = '1.0.0';
+export const PROMPT_VERSION = "1.0.0";
 
 export const ADVISORY_SYSTEM_PROMPT = `You are an independent thesis evaluation layer inside a macro decision engine.
 
@@ -79,11 +79,11 @@ ${JSON.stringify(packet, null, 2)}
 
 ## DETERMINISTIC ENGINE SCORES (for reference — do NOT simply agree with these)
 
-Composite: ${packet.deterministic_scores.composite_score ?? 'not scored'}
-Evidence Layer: ${packet.deterministic_scores.evidence_layer ?? '—'}/10
-Structure Layer: ${packet.deterministic_scores.structure_layer ?? '—'}/10
-Market Edge Layer: ${packet.deterministic_scores.market_edge_layer ?? '—'}/10
-Confidence: ${packet.deterministic_scores.confidence_level ?? '—'}
+Composite: ${packet.deterministic_scores.composite_score ?? "not scored"}
+Evidence Layer: ${packet.deterministic_scores.evidence_layer ?? "—"}/10
+Structure Layer: ${packet.deterministic_scores.structure_layer ?? "—"}/10
+Market Edge Layer: ${packet.deterministic_scores.market_edge_layer ?? "—"}/10
+Confidence: ${packet.deterministic_scores.confidence_level ?? "—"}
 Penalties: ${packet.deterministic_scores.penalty_total ?? 0}
 
 ## INSTRUCTIONS
