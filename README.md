@@ -18,7 +18,7 @@ A macro decision engine for tracking geopolitical and economic signals, developi
 |-------|------|
 | Frontend | React 19, Vite, Zustand, TailwindCSS |
 | Backend | Express 5, Node.js |
-| Database | SQLite (better-sqlite3, WAL mode) |
+| Database | SQLite (better-sqlite3, WAL mode) — prototype; Session 1a replaces with PostgreSQL + Knex.js |
 | Testing | Vitest |
 
 ## Local setup
