@@ -58,17 +58,16 @@ export const useThesisStore = create((set, get) => ({
   },
 
   updateThesis: async (id, data) => {
-    set({ loading: true, error: null });
+    set({ error: null });
     try {
       const thesis = await api.updateThesis(id, data);
       set((state) => ({
         theses: state.theses.map(t => t.id === id ? thesis : t),
         activeThesis: state.activeThesis?.id === id ? thesis : state.activeThesis,
-        loading: false,
       }));
       return thesis;
     } catch (err) {
-      set({ error: err.message, loading: false });
+      set({ error: err.message });
       throw err;
     }
   },
