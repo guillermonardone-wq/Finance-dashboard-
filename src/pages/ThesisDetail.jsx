@@ -11,6 +11,8 @@ import ThesisScorecardTab from '../components/thesis/ThesisScorecardTab';
 import ThesisAuditTab from '../components/thesis/ThesisAuditTab';
 import PredictionMarketTab from '../components/PredictionMarketTab';
 import AdvisoryTab from '../components/AdvisoryTab';
+import ChecklistTab from '../components/thesis/ChecklistTab';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 const TABS = [
   'Overview',
@@ -119,47 +121,57 @@ export default function ThesisDetail() {
         ))}
       </div>
 
-      {/* Tab content — each tab is a focused component */}
+      {/* Tab content — each tab wrapped in error boundary */}
       {tab === 'Overview' && (
-        <ThesisOverviewTab
-          thesis={thesis}
-          signals={signals}
-          evaluation={evaluation}
-        />
+        <ErrorBoundary label="Overview">
+          <ThesisOverviewTab
+            thesis={thesis}
+            signals={signals}
+            evaluation={evaluation}
+          />
+        </ErrorBoundary>
       )}
 
       {tab === 'Evidence' && (
-        <ThesisEvidenceTab
-          thesisId={id}
-          signals={signals}
-        />
+        <ErrorBoundary label="Evidence">
+          <ThesisEvidenceTab
+            thesisId={id}
+            signals={signals}
+          />
+        </ErrorBoundary>
       )}
 
       {tab === 'Prediction Markets' && (
-        <PredictionMarketTab thesis={thesis} />
+        <ErrorBoundary label="Prediction Markets">
+          <PredictionMarketTab thesis={thesis} />
+        </ErrorBoundary>
       )}
 
       {tab === 'LLM Review' && (
-        <AdvisoryTab thesis={thesis} />
+        <ErrorBoundary label="LLM Review">
+          <AdvisoryTab thesis={thesis} />
+        </ErrorBoundary>
       )}
 
       {tab === 'Scorecard' && (
-        <ThesisScorecardTab
-          evaluation={evaluation}
-          onScoreUpdate={handleScoreUpdate}
-        />
+        <ErrorBoundary label="Scorecard">
+          <ThesisScorecardTab
+            evaluation={evaluation}
+            onScoreUpdate={handleScoreUpdate}
+          />
+        </ErrorBoundary>
       )}
 
       {tab === 'Checklist' && (
-        <div className="text-sm text-slate-500 py-8 text-center">
-          Pre-trade checklist will be available once thesis is classified as PAPER TRADE or above.
-          <br />
-          Current classification: {thesis.classification}
-        </div>
+        <ErrorBoundary label="Checklist">
+          <ChecklistTab thesis={thesis} />
+        </ErrorBoundary>
       )}
 
       {tab === 'Audit Log' && (
-        <ThesisAuditTab thesis={thesis} />
+        <ErrorBoundary label="Audit Log">
+          <ThesisAuditTab thesis={thesis} />
+        </ErrorBoundary>
       )}
     </div>
   );
