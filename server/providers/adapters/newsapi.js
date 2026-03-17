@@ -5,7 +5,7 @@ const BASE_URL = "https://newsapi.org/v2";
 export class NewsApiProvider extends BaseProvider {
   constructor(config = {}) {
     super("newsapi", config);
-    this.apiKey = config.apiKey || process.env.NEWSAPI_API_KEY;
+    this.apiKey = config.apiKey;
   }
 
   get capabilities() {

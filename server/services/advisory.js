@@ -10,11 +10,12 @@ import {
   PROMPT_VERSION,
   buildUserPrompt,
 } from "./advisory-prompt.js";
+import config from "../config.js";
 
 // --- LLM PROVIDER ADAPTERS ---
 
 async function callAnthropic(systemPrompt, userPrompt, model) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = config.llm.anthropicKey;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set in environment");
 
   const startTime = Date.now();
@@ -51,7 +52,7 @@ async function callAnthropic(systemPrompt, userPrompt, model) {
 }
 
 async function callOpenAI(systemPrompt, userPrompt, model) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = config.llm.openaiKey;
   if (!apiKey) throw new Error("OPENAI_API_KEY not set in environment");
 
   const startTime = Date.now();
@@ -229,8 +230,8 @@ function computeComparison(llmScores, deterministicScores) {
 
 export async function runAdvisoryEvaluation(thesisId, options = {}) {
   const knex = getKnex();
-  const provider = options.provider || process.env.LLM_PROVIDER || "anthropic";
-  const model = options.model || process.env.LLM_MODEL || undefined;
+  const provider = options.provider || config.llm.provider;
+  const model = options.model || config.llm.model;
 
   const callLLM = PROVIDERS[provider];
   if (!callLLM)

@@ -4,6 +4,7 @@
 
 import { v4 as uuidv4 } from "uuid";
 import { getKnex } from "../db/connection.js";
+import config from "../config.js";
 
 const GDELT_DOC_API = "https://api.gdeltproject.org/api/v2/doc/doc";
 
@@ -17,7 +18,7 @@ const GDELT_KEYWORDS = [
   { query: "taiwan strait", category: "geopolitical_escalation" },
 ];
 
-const SPIKE_MULTIPLIER = parseFloat(process.env.GDELT_SPIKE_MULTIPLIER) || 2.0;
+const SPIKE_MULTIPLIER = config.signals.gdeltSpikeMultiplier;
 
 const rollingAverages = new Map();
 const volumeHistory = new Map();

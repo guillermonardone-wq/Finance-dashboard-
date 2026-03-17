@@ -16,6 +16,8 @@ import { FinnhubProvider } from "./adapters/finnhub.js";
 import { NewsApiProvider } from "./adapters/newsapi.js";
 import { FredProvider } from "./adapters/fred.js";
 import { WorldBankProvider } from "./adapters/worldbank.js";
+import config from "../config.js";
+import { recordSuccess, recordFailure } from "../services/provider-health.js";
 
 class ProviderRegistry {
   constructor() {
@@ -26,10 +28,10 @@ class ProviderRegistry {
   async initialize() {
     // Register all providers — order matters for fallback priority
     const adapters = [
-      new FinnhubProvider(),
-      new AlphaVantageProvider(),
-      new NewsApiProvider(),
-      new FredProvider(),
+      new FinnhubProvider({ apiKey: config.providers.finnhub }),
+      new AlphaVantageProvider({ apiKey: config.providers.alphaVantage }),
+      new NewsApiProvider({ apiKey: config.providers.newsApi }),
+      new FredProvider({ apiKey: config.providers.fred }),
       new WorldBankProvider(),
     ];
 
@@ -80,6 +82,7 @@ class ProviderRegistry {
       const provider = providers[i];
       try {
         const data = await provider[method](...args);
+        recordSuccess(provider.name).catch(() => {});
         return {
           success: true,
           data,
@@ -88,6 +91,7 @@ class ProviderRegistry {
           source_attribution: `${provider.name} via ${method}`,
         };
       } catch (err) {
+        recordFailure(provider.name, err).catch(() => {});
         console.warn(
           `[Registry] ${provider.name}.${method}() failed: ${err.message}`,
         );

@@ -1,8 +1,9 @@
 import express from "express";
 import cors from "cors";
 
-import config from "./config.js";
+import config, { validateConfig } from "./config.js";
 import { initDb, getKnex, closeDb } from "./db/connection.js";
+import { apiKeyAuth } from "./middleware/auth.js";
 import { registry } from "./providers/registry.js";
 import { cache } from "./services/cache.js";
 import { seed } from "./seed-fn.js";
@@ -15,16 +16,23 @@ import reviewsRouter from "./routes/reviews.js";
 import botRouter from "./routes/bot.js";
 import predictionMarketsRouter from "./routes/prediction-markets.js";
 import advisoryRouter from "./routes/advisory.js";
-
-const PORT = config.port;
+import systemRouter from "./routes/system.js";
 
 const app = express();
-app.use(cors());
+
+// ---- CORS (hardened) ----
+app.use(cors({ origin: config.corsOrigin }));
 app.use(express.json({ limit: "5mb" }));
+
+// ---- API key auth on all /api routes ----
+app.use("/api", apiKeyAuth);
 
 // ---- Bootstrap (async) ----
 (async () => {
   try {
+    // Validate config
+    validateConfig();
+
     // Initialize database — runs Knex migrations
     console.log("[Server] Initializing database...");
     await initDb();
@@ -63,8 +71,9 @@ app.use(express.json({ limit: "5mb" }));
     app.use("/api/bot", botRouter);
     app.use("/api/prediction-markets", predictionMarketsRouter);
     app.use("/api/advisory", advisoryRouter);
+    app.use("/api/system", systemRouter);
 
-    // Health endpoint
+    // Legacy health endpoint (kept for backward compat)
     app.get("/api/health", async (req, res) => {
       let dbOk = false;
       try {
@@ -88,8 +97,13 @@ app.use(express.json({ limit: "5mb" }));
       res.status(500).json({ error: "Internal server error" });
     });
 
-    app.listen(PORT, () => {
-      console.log(`[Server] Signal Forge API running on port ${PORT}`);
+    app.listen(config.port, () => {
+      console.log(`[Server] Signal Forge API running on port ${config.port}`);
+      if (!config.apiKey) {
+        console.log("[Server] Auth: dev mode (no API_KEY set — all requests allowed)");
+      } else {
+        console.log("[Server] Auth: API key required on all /api routes");
+      }
     });
 
     // Graceful shutdown

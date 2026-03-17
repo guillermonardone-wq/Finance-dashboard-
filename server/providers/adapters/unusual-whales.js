@@ -14,13 +14,14 @@
 
 import { BaseProvider } from "../interface.js";
 
-const BASE_URL =
-  process.env.UNUSUAL_WHALES_BASE_URL || "https://api.unusualwhales.com";
+import appConfig from "../../config.js";
+
+const BASE_URL = appConfig.providers.unusualWhalesBaseUrl;
 
 export class UnusualWhalesProvider extends BaseProvider {
   constructor(config = {}) {
     super("unusual_whales", config);
-    this.apiKey = config.apiKey || process.env.UNUSUAL_WHALES_API_KEY;
+    this.apiKey = config.apiKey;
   }
 
   get capabilities() {

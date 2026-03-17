@@ -5,6 +5,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { registry } from "../providers/registry.js";
 import { getKnex } from "../db/connection.js";
+import config from "../config.js";
 
 const FRED_SIGNAL_SERIES = [
   { id: "FEDERAL_FUNDS_RATE", label: "Fed Funds Rate", category: "central_bank_action", unit: "%", defaultThreshold: 0.25 },
@@ -14,8 +15,7 @@ const FRED_SIGNAL_SERIES = [
   { id: "US_TREASURY_10Y", label: "10-Year Treasury Yield", category: "credit_stress", unit: "%", defaultThreshold: 0.15 },
 ];
 
-const THRESHOLD_MULTIPLIER =
-  parseFloat(process.env.FRED_SIGNAL_THRESHOLD_MULT) || 1.0;
+const THRESHOLD_MULTIPLIER = config.signals.fredThresholdMult;
 
 function computeStdDev(values) {
   if (values.length < 3) return null;

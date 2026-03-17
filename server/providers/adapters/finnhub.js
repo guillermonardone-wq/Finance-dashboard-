@@ -5,7 +5,7 @@ const BASE_URL = "https://finnhub.io/api/v1";
 export class FinnhubProvider extends BaseProvider {
   constructor(config = {}) {
     super("finnhub", config);
-    this.apiKey = config.apiKey || process.env.FINNHUB_API_KEY;
+    this.apiKey = config.apiKey;
   }
 
   get capabilities() {

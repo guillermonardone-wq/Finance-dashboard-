@@ -186,7 +186,7 @@ const SERIES_MAP = {
 export class FredProvider extends BaseProvider {
   constructor(config = {}) {
     super("fred", config);
-    this.apiKey = config.apiKey || process.env.FRED_API_KEY;
+    this.apiKey = config.apiKey;
   }
 
   get capabilities() {

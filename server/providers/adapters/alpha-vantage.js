@@ -5,7 +5,7 @@ const BASE_URL = "https://www.alphavantage.co/query";
 export class AlphaVantageProvider extends BaseProvider {
   constructor(config = {}) {
     super("alpha_vantage", config);
-    this.apiKey = config.apiKey || process.env.ALPHA_VANTAGE_API_KEY;
+    this.apiKey = config.apiKey;
   }
 
   get capabilities() {

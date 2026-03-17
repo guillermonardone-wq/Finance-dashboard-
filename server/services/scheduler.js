@@ -8,6 +8,8 @@ import { registry } from "../providers/registry.js";
 import { getKnex } from "../db/connection.js";
 import { checkFredSignals } from "./fred-signals.js";
 import { checkGdeltSignals } from "./gdelt-signals.js";
+import config from "../config.js";
+import { logFailure } from "./dead-letter.js";
 
 const WATCHLIST = ["SPY", "QQQ", "TLT", "GLD", "USO", "UUP", "EEM", "IWM"];
 const FRED_SERIES = ["CPI", "GDP", "UNRATE", "FEDFUNDS", "DGS10", "DGS2"];
@@ -18,13 +20,7 @@ const NEWS_QUERIES = [
   "geopolitics",
 ];
 
-const INTERVALS = {
-  prices: parseInt(process.env.REFRESH_INTERVAL_PRICES) || 300,
-  news: parseInt(process.env.REFRESH_INTERVAL_NEWS) || 900,
-  macro: parseInt(process.env.REFRESH_INTERVAL_MACRO) || 3600,
-  fredSignals: parseInt(process.env.REFRESH_INTERVAL_FRED_SIGNALS) || 86400,
-  gdeltSignals: parseInt(process.env.REFRESH_INTERVAL_GDELT_SIGNALS) || 1800,
-};
+const INTERVALS = config.refresh;
 
 // Map news keywords to signal categories
 function categorizeNews(title, description) {
@@ -119,6 +115,7 @@ async function fetchPrices() {
     console.log("[Scheduler] Prices updated.");
   } catch (err) {
     console.warn("[Scheduler] Price fetch failed:", err.message);
+    logFailure("price_fetch", { symbols: WATCHLIST }, err).catch(() => {});
   }
 }
 
@@ -151,6 +148,7 @@ async function fetchNews() {
     );
   } catch (err) {
     console.warn("[Scheduler] News fetch failed:", err.message);
+    logFailure("news_fetch", { queries: NEWS_QUERIES }, err).catch(() => {});
   }
 }
 
@@ -166,6 +164,7 @@ async function fetchMacro() {
     }
   } catch (err) {
     console.warn("[Scheduler] Macro fetch failed:", err.message);
+    logFailure("macro_fetch", { series: FRED_SERIES }, err).catch(() => {});
   }
 }
 

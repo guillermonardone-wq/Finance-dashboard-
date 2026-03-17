@@ -6,12 +6,12 @@ import { v4 as uuidv4 } from "uuid";
 import { getKnex } from "../db/connection.js";
 import { registry } from "../providers/registry.js";
 import { cache } from "./cache.js";
+import config from "../config.js";
 
-// TTL defaults from env or fallback
 const TTL = {
-  prices: parseInt(process.env.CACHE_TTL_PRICES) || 300,
-  news: parseInt(process.env.CACHE_TTL_NEWS) || 600,
-  macro: parseInt(process.env.CACHE_TTL_MACRO) || 3600,
+  prices: config.cache.ttlPrices,
+  news: config.cache.ttlNews,
+  macro: config.cache.ttlMacro,
 };
 
 export class IngestionService {

@@ -1,8 +1,8 @@
 // ============================================================
-// CENTRALIZED CONFIGURATION
+// CENTRALIZED CONFIGURATION — Single source of truth
 // ============================================================
-// Single source of truth for all server configuration.
-// Reads from environment variables with sensible defaults.
+// All server modules import config from here.
+// No direct process.env usage outside this file.
 // ============================================================
 
 import dotenv from "dotenv";
@@ -23,6 +23,9 @@ function envStr(key, defaultVal = "") {
 }
 
 const config = {
+  // Environment
+  env: envStr("NODE_ENV", "development"),
+
   // Server
   port: envInt("PORT", 3002),
 
@@ -35,20 +38,37 @@ const config = {
     password: envStr("DB_PASSWORD", "dev_password"),
   },
 
-  // Legacy (kept for reference, no longer used)
-  dbPath: envStr("DB_PATH", "./data/decision-engine.db"),
+  // API key for authenticating requests (empty = dev mode, no auth)
+  apiKey: envStr("API_KEY"),
 
-  // API Keys
-  apiKeys: {
+  // CORS
+  corsOrigin: envStr("CORS_ORIGIN", "http://localhost:5173"),
+
+  // Data provider API keys
+  providers: {
     alphaVantage: envStr("ALPHA_VANTAGE_API_KEY"),
-    newsapi: envStr("NEWSAPI_API_KEY"),
     finnhub: envStr("FINNHUB_API_KEY"),
-    unusualWhales: envStr("UNUSUAL_WHALES_API_KEY"),
     fred: envStr("FRED_API_KEY"),
+    worldBank: envStr("WORLD_BANK_API_KEY"),
+    newsApi: envStr("NEWSAPI_API_KEY"),
+    unusualWhales: envStr("UNUSUAL_WHALES_API_KEY"),
+    unusualWhalesBaseUrl: envStr(
+      "UNUSUAL_WHALES_BASE_URL",
+      "https://api.unusualwhales.com",
+    ),
     polygon: envStr("POLYGON_API_KEY"),
-    anthropic: envStr("ANTHROPIC_API_KEY"),
-    openai: envStr("OPENAI_API_KEY"),
   },
+
+  // LLM Advisory
+  llm: {
+    provider: envStr("LLM_PROVIDER", "anthropic"),
+    model: envStr("LLM_MODEL", "claude-sonnet-4-6"),
+    anthropicKey: envStr("ANTHROPIC_API_KEY"),
+    openaiKey: envStr("OPENAI_API_KEY"),
+  },
+
+  // Notifications (placeholder for future sessions)
+  notifications: {},
 
   // Cache TTLs (seconds)
   cache: {
@@ -71,12 +91,44 @@ const config = {
     fredThresholdMult: envFloat("FRED_SIGNAL_THRESHOLD_MULT", 1.0),
     gdeltSpikeMultiplier: envFloat("GDELT_SPIKE_MULTIPLIER", 2.0),
   },
-
-  // LLM Advisory
-  llm: {
-    provider: envStr("LLM_PROVIDER", "anthropic"),
-    model: envStr("LLM_MODEL", "claude-sonnet-4-6"),
-  },
 };
+
+/**
+ * Validate critical config on startup. Warns but does not crash in dev.
+ */
+export function validateConfig() {
+  const warnings = [];
+
+  if (!config.db.host) warnings.push("DB_HOST is not set");
+  if (!config.db.password || config.db.password === "dev_password") {
+    warnings.push("DB_PASSWORD is using default — set a real password for production");
+  }
+
+  if (!config.apiKey && config.env === "production") {
+    warnings.push("API_KEY is not set — all requests will be unauthenticated");
+  }
+
+  const hasAnyProvider =
+    config.providers.alphaVantage ||
+    config.providers.finnhub ||
+    config.providers.fred ||
+    config.providers.newsApi;
+  if (!hasAnyProvider) {
+    warnings.push("No data provider API keys configured — live data will be unavailable");
+  }
+
+  if (!config.llm.anthropicKey && !config.llm.openaiKey) {
+    warnings.push("No LLM API key configured — advisory evaluations will fail");
+  }
+
+  if (warnings.length > 0) {
+    console.warn("[Config] Warnings:");
+    warnings.forEach((w) => console.warn(`  - ${w}`));
+  } else {
+    console.log("[Config] All critical configuration validated.");
+  }
+
+  return warnings;
+}
 
 export default config;
