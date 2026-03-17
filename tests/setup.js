@@ -11,39 +11,37 @@
  */
 export function makeThesis(overrides = {}) {
   return {
-    id: 'test-thesis',
-    title: 'Test thesis about macro events',
-    thesis_statement: 'The Fed will cut rates due to employment weakness',
-    causal_chain: ['Employment slows', 'CPI drops', 'Fed pivots'],
-    affected_assets: [{ asset: 'SPY', direction: 'long' }],
+    id: "test-thesis",
+    title: "Test thesis about macro events",
+    thesis_statement: "The Fed will cut rates due to employment weakness",
+    causal_chain: ["Employment slows", "CPI drops", "Fed pivots"],
+    affected_assets: [{ asset: "SPY", direction: "long" }],
     expected_timeline: {
-      start: '2025-01-01',
-      end: '2025-06-01',
-      basis: 'Historical Fed cycles',
+      start: "2025-01-01",
+      end: "2025-06-01",
+      basis: "Historical Fed cycles",
     },
     probability_low: 0.3,
     probability_high: 0.7,
     probability_best: 0.5,
     key_assumptions: [
-      'Employment continues to weaken',
-      'No inflation resurgence',
+      "Employment continues to weaken",
+      "No inflation resurgence",
     ],
-    alternative_explanations: [
-      'Fiscal stimulus offsets monetary tightening',
-    ],
+    alternative_explanations: ["Fiscal stimulus offsets monetary tightening"],
     invalidating_indicators: [
-      { indicator: 'CPI > 4%', description: 'Inflation re-accelerates' },
+      { indicator: "CPI > 4%", description: "Inflation re-accelerates" },
     ],
-    disconfirming_evidence: ['Strong payroll data could invalidate'],
+    disconfirming_evidence: ["Strong payroll data could invalidate"],
     strongest_bear_case:
-      'Inflation may prove stickier than expected, preventing any rate action for years.',
+      "Inflation may prove stickier than expected, preventing any rate action for years.",
     what_would_make_opposite_stronger:
-      'If core services inflation reaccelerates above 5% while employment stays strong, the thesis is dead.',
+      "If core services inflation reaccelerates above 5% while employment stays strong, the thesis is dead.",
     leading_indicators: [
-      { indicator: 'Initial claims', target_state: 'Rising above 250k' },
+      { indicator: "Initial claims", target_state: "Rising above 250k" },
     ],
-    status: 'active',
-    classification: 'DEVELOP',
+    status: "active",
+    classification: "DEVELOP",
     created_at: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
     ...overrides,
   };
@@ -78,24 +76,24 @@ export function makeScores(overrides = {}) {
  * Create an array of signal objects with diverse source types.
  */
 export function makeSignals(count = 5, overrides = {}) {
-  const types = ['manual', 'fred', 'newsapi', 'finnhub', 'gdelt'];
+  const types = ["manual", "fred", "newsapi", "finnhub", "gdelt"];
   const categories = [
-    'central_bank_action',
-    'labor_market',
-    'inflation',
-    'geopolitical',
-    'fiscal_policy',
+    "central_bank_action",
+    "labor_market",
+    "inflation",
+    "geopolitical",
+    "fiscal_policy",
   ];
   return Array.from({ length: count }, (_, i) => ({
     id: `sig-${i}`,
     title: `Signal ${i}: ${categories[i % categories.length]}`,
     source_type: types[i % types.length],
     category: categories[i % categories.length],
-    reliability: i % 3 === 0 ? 'verified' : 'likely',
+    reliability: i % 3 === 0 ? "verified" : "likely",
     signal_strength: 0.6 + i * 0.05,
-    novelty: 'developing',
-    status: 'linked',
-    thesis_id: 'test-thesis',
+    novelty: "developing",
+    status: "linked",
+    thesis_id: "test-thesis",
     created_at: new Date(Date.now() - i * 12 * 3600 * 1000).toISOString(),
     ...overrides,
   }));

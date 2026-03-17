@@ -62,11 +62,15 @@ All API keys are optional. The app runs fully without any external providers.
 ## Running tests
 
 ```bash
-# Run all tests (vitest)
+# Run all tests — scoring engine, classification, gates, checklist,
+# thesis repo safety, column allowlist (vitest, 173 tests)
 npm test
 
 # Watch mode
 npm run test:watch
+
+# Legacy provider/normalization tests (node:assert, not vitest)
+npm run test:legacy
 ```
 
 ## What is currently implemented
@@ -86,9 +90,19 @@ npm run test:watch
 
 ## What is intentionally not implemented yet
 
-- PostgreSQL / Knex (currently SQLite — DB access is isolated in `server/db/*-repo.js` for future migration)
-- Authentication / multi-user
+- PostgreSQL / Knex (currently SQLite — DB access is isolated in `server/db/*-repo.js` for future migration). See `server/db/MIGRATION_READY.md` for the migration plan.
+- Authentication / multi-user (placeholder middleware at `server/middleware/auth.js`)
 - Trade execution tracking
 - Research lab / social features
-- Full pre-trade checklist UI
 - Dead letter queue for failed provider calls
+
+## Pre-build status
+
+This prototype has been hardened for the Master Build Sequence v4.2:
+
+- Root-level ErrorBoundary catches crashes in any route
+- 173 automated tests covering scoring, classification, gates, checklist, thesis repo safety
+- Column allowlist prevents SQL injection via dynamic updates
+- All core files formatted with Prettier
+- `server/db/RAW_SQL_INVENTORY.md` documents every raw SQL query for migration
+- `server/middleware/auth.js` and `server/config.js` scaffolded for Session 1b

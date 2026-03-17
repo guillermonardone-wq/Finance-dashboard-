@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { api } from '../lib/api';
+import { create } from "zustand";
+import { api } from "../lib/api";
 
 export const usePredictionMarketStore = create((set, get) => ({
   links: [],
@@ -42,7 +42,9 @@ export const usePredictionMarketStore = create((set, get) => ({
   updateLink: async (id, data) => {
     try {
       const link = await api.updatePMLink(id, data);
-      set((state) => ({ links: state.links.map(l => l.id === id ? { ...l, ...link } : l) }));
+      set((state) => ({
+        links: state.links.map((l) => (l.id === id ? { ...l, ...link } : l)),
+      }));
       return link;
     } catch (err) {
       set({ error: err.message });
@@ -53,7 +55,7 @@ export const usePredictionMarketStore = create((set, get) => ({
   deleteLink: async (id) => {
     try {
       await api.deletePMLink(id);
-      set((state) => ({ links: state.links.filter(l => l.id !== id) }));
+      set((state) => ({ links: state.links.filter((l) => l.id !== id) }));
     } catch (err) {
       set({ error: err.message });
     }
@@ -79,5 +81,13 @@ export const usePredictionMarketStore = create((set, get) => ({
     }
   },
 
-  reset: () => set({ links: [], assessment: null, assessmentHistory: [], events: [], loading: false, error: null }),
+  reset: () =>
+    set({
+      links: [],
+      assessment: null,
+      assessmentHistory: [],
+      events: [],
+      loading: false,
+      error: null,
+    }),
 }));

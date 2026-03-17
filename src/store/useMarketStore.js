@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { api } from '../lib/api';
+import { create } from "zustand";
+import { api } from "../lib/api";
 
 export const useMarketStore = create((set) => ({
   providers: {},
@@ -52,7 +52,10 @@ export const useMarketStore = create((set) => ({
     set({ loading: true });
     try {
       const results = await api.fetchWatchlist(symbols);
-      set((state) => ({ prices: { ...state.prices, ...results }, loading: false }));
+      set((state) => ({
+        prices: { ...state.prices, ...results },
+        loading: false,
+      }));
     } catch (err) {
       set({ error: err.message, loading: false });
     }
@@ -62,7 +65,8 @@ export const useMarketStore = create((set) => ({
     try {
       const result = await api.getNews(query);
       if (result.data?.data) set({ news: result.data.data });
-      else if (result.data) set({ news: Array.isArray(result.data) ? result.data : [] });
+      else if (result.data)
+        set({ news: Array.isArray(result.data) ? result.data : [] });
     } catch (err) {
       set({ error: err.message });
     }
@@ -71,7 +75,9 @@ export const useMarketStore = create((set) => ({
   fetchMacroSeries: async (seriesId) => {
     try {
       const result = await api.getMacroSeries(seriesId);
-      set((state) => ({ macroData: { ...state.macroData, [seriesId]: result } }));
+      set((state) => ({
+        macroData: { ...state.macroData, [seriesId]: result },
+      }));
     } catch (err) {
       set({ error: err.message });
     }
@@ -107,7 +113,9 @@ export const useMarketStore = create((set) => ({
     try {
       const result = await api.getFredSeriesData(seriesId);
       if (result.success) {
-        set((state) => ({ fredData: { ...state.fredData, [seriesId]: result.data } }));
+        set((state) => ({
+          fredData: { ...state.fredData, [seriesId]: result.data },
+        }));
       }
       return result;
     } catch (err) {
@@ -144,7 +152,9 @@ export const useMarketStore = create((set) => ({
       if (to) params.to = to;
       const result = await api.getWorldBankData(indicator, params);
       if (result.success) {
-        set((state) => ({ worldBankData: { ...state.worldBankData, [indicator]: result.data } }));
+        set((state) => ({
+          worldBankData: { ...state.worldBankData, [indicator]: result.data },
+        }));
       }
       return result;
     } catch (err) {

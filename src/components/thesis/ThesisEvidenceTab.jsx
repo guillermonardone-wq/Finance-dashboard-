@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react';
-import { api } from '../../lib/api';
-import { useSignalStore } from '../../store/useSignalStore';
-import SourceBadge from './SourceBadge';
+import { useState, useCallback } from "react";
+import { api } from "../../lib/api";
+import { useSignalStore } from "../../store/useSignalStore";
+import SourceBadge from "./SourceBadge";
 
 /**
  * ThesisEvidenceTab — Linked signals list + search/link panel.
@@ -10,10 +10,10 @@ import SourceBadge from './SourceBadge';
  */
 export default function ThesisEvidenceTab({ thesisId, signals }) {
   const { updateSignal, fetchCounts } = useSignalStore();
-  const fetchSignals = useSignalStore(s => s.fetchSignals);
+  const fetchSignals = useSignalStore((s) => s.fetchSignals);
 
   const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
 
   const refreshLinked = useCallback(() => {
@@ -22,13 +22,16 @@ export default function ThesisEvidenceTab({ thesisId, signals }) {
 
   const loadInboxSignals = useCallback(async (query) => {
     try {
-      const results = await api.getSignals({ status: 'inbox' });
+      const results = await api.getSignals({ status: "inbox" });
       if (query) {
         const q = query.toLowerCase();
-        return results.filter(s =>
-          s.title.toLowerCase().includes(q) ||
-          (s.description && s.description.toLowerCase().includes(q))
-        ).slice(0, 10);
+        return results
+          .filter(
+            (s) =>
+              s.title.toLowerCase().includes(q) ||
+              (s.description && s.description.toLowerCase().includes(q)),
+          )
+          .slice(0, 10);
       }
       return results.slice(0, 10);
     } catch {
@@ -36,14 +39,17 @@ export default function ThesisEvidenceTab({ thesisId, signals }) {
     }
   }, []);
 
-  const handleSearchChange = useCallback(async (value) => {
-    setSearchQuery(value);
-    if (value.trim().length >= 2) {
-      setSearchResults(await loadInboxSignals(value));
-    } else if (value.trim().length === 0) {
-      setSearchResults(await loadInboxSignals(null));
-    }
-  }, [loadInboxSignals]);
+  const handleSearchChange = useCallback(
+    async (value) => {
+      setSearchQuery(value);
+      if (value.trim().length >= 2) {
+        setSearchResults(await loadInboxSignals(value));
+      } else if (value.trim().length === 0) {
+        setSearchResults(await loadInboxSignals(null));
+      }
+    },
+    [loadInboxSignals],
+  );
 
   const handleSearchFocus = useCallback(async () => {
     if (searchResults.length === 0) {
@@ -51,18 +57,24 @@ export default function ThesisEvidenceTab({ thesisId, signals }) {
     }
   }, [searchResults.length, loadInboxSignals]);
 
-  const handleLink = useCallback(async (signalId) => {
-    await updateSignal(signalId, { thesis_id: thesisId, status: 'linked' });
-    refreshLinked();
-    fetchCounts();
-    setSearchResults(prev => prev.filter(r => r.id !== signalId));
-  }, [updateSignal, thesisId, refreshLinked, fetchCounts]);
+  const handleLink = useCallback(
+    async (signalId) => {
+      await updateSignal(signalId, { thesis_id: thesisId, status: "linked" });
+      refreshLinked();
+      fetchCounts();
+      setSearchResults((prev) => prev.filter((r) => r.id !== signalId));
+    },
+    [updateSignal, thesisId, refreshLinked, fetchCounts],
+  );
 
-  const handleUnlink = useCallback(async (signalId) => {
-    await updateSignal(signalId, { thesis_id: null, status: 'inbox' });
-    refreshLinked();
-    fetchCounts();
-  }, [updateSignal, refreshLinked, fetchCounts]);
+  const handleUnlink = useCallback(
+    async (signalId) => {
+      await updateSignal(signalId, { thesis_id: null, status: "inbox" });
+      refreshLinked();
+      fetchCounts();
+    },
+    [updateSignal, refreshLinked, fetchCounts],
+  );
 
   return (
     <div className="space-y-4">
@@ -71,13 +83,13 @@ export default function ThesisEvidenceTab({ thesisId, signals }) {
         <h2 className="text-sm font-bold text-slate-300">Linked Signals</h2>
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500">
-            {signals.length} signal{signals.length !== 1 ? 's' : ''}
+            {signals.length} signal{signals.length !== 1 ? "s" : ""}
           </span>
           <button
             onClick={() => setShowSearch(!showSearch)}
             className="px-3 py-1.5 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 rounded transition-colors"
           >
-            {showSearch ? 'Close' : '+ Add Signal'}
+            {showSearch ? "Close" : "+ Add Signal"}
           </button>
         </div>
       </div>
@@ -87,7 +99,7 @@ export default function ThesisEvidenceTab({ thesisId, signals }) {
         <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
           <input
             value={searchQuery}
-            onChange={e => handleSearchChange(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             onFocus={handleSearchFocus}
             className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 mb-3"
             placeholder="Search inbox signals by title or description..."
@@ -96,27 +108,35 @@ export default function ThesisEvidenceTab({ thesisId, signals }) {
           <div className="space-y-1 max-h-64 overflow-y-auto">
             {searchResults.length === 0 ? (
               <p className="text-xs text-slate-600 py-4 text-center">
-                {searchQuery ? 'No matching signals in inbox.' : 'No unlinked signals available.'}
+                {searchQuery
+                  ? "No matching signals in inbox."
+                  : "No unlinked signals available."}
               </p>
             ) : (
-              searchResults.map(s => {
-                const alreadyLinked = signals.some(linked => linked.id === s.id);
+              searchResults.map((s) => {
+                const alreadyLinked = signals.some(
+                  (linked) => linked.id === s.id,
+                );
                 return (
                   <div
                     key={s.id}
                     className="flex items-center justify-between px-3 py-2 rounded bg-slate-800/50 hover:bg-slate-800 transition-colors"
                   >
                     <div className="flex-1 min-w-0 mr-3">
-                      <p className="text-xs text-slate-200 truncate">{s.title}</p>
+                      <p className="text-xs text-slate-200 truncate">
+                        {s.title}
+                      </p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <SourceBadge type={s.source_type} />
                         <span className="text-xs text-slate-600">
-                          {s.category?.replace(/_/g, ' ')}
+                          {s.category?.replace(/_/g, " ")}
                         </span>
                       </div>
                     </div>
                     {alreadyLinked ? (
-                      <span className="text-xs text-slate-600 flex-shrink-0">linked</span>
+                      <span className="text-xs text-slate-600 flex-shrink-0">
+                        linked
+                      </span>
                     ) : (
                       <button
                         onClick={() => handleLink(s.id)}
@@ -136,24 +156,34 @@ export default function ThesisEvidenceTab({ thesisId, signals }) {
       {/* Linked signals list */}
       {signals.length === 0 ? (
         <p className="text-sm text-slate-600 py-8 text-center">
-          No linked signals yet. Click "+ Add Signal" to search and link evidence.
+          No linked signals yet. Click "+ Add Signal" to search and link
+          evidence.
         </p>
       ) : (
-        signals.map(s => (
-          <div key={s.id} className="bg-slate-800/50 rounded p-3 border border-slate-700/30">
+        signals.map((s) => (
+          <div
+            key={s.id}
+            className="bg-slate-800/50 rounded p-3 border border-slate-700/30"
+          >
             <div className="flex justify-between items-start">
               <div className="flex-1 min-w-0">
                 <span className="text-sm text-slate-200">{s.title}</span>
-                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{s.description}</p>
+                <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                  {s.description}
+                </p>
                 <div className="flex items-center gap-2 mt-2">
                   <SourceBadge type={s.source_type} />
                   <span className="text-xs text-slate-600">
-                    {s.category?.replace(/_/g, ' ')}
+                    {s.category?.replace(/_/g, " ")}
                   </span>
                   {s.source_attribution && (
-                    <span className="text-xs text-slate-600">via {s.source_attribution}</span>
+                    <span className="text-xs text-slate-600">
+                      via {s.source_attribution}
+                    </span>
                   )}
-                  <span className={`text-xs ${s.reliability === 'verified' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  <span
+                    className={`text-xs ${s.reliability === "verified" ? "text-emerald-400" : "text-slate-500"}`}
+                  >
                     {s.reliability}
                   </span>
                 </div>

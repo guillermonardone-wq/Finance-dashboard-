@@ -28,6 +28,37 @@ gdelt_monitoring, cot_positions, fred_data, regime_state, provider_cache
 - dead_letter_queue: failed_job_id, job_type, payload, error, retry_count, next_retry
 
 ## Pre-Migration Checklist
-- [ ] All raw SQL queries identified and documented
+- [x] All raw SQL queries identified and documented (see RAW_SQL_INVENTORY.md — ~88 operations across 20 files)
+- [x] .env.example has DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+- [x] Centralized config exists (server/config.js) with DB section ready
+- [x] Auth middleware placeholder exists (server/middleware/auth.js)
 - [ ] Docker installed on host machine
-- [ ] .env template has DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+- [ ] docker-compose.yml created with PostgreSQL 16
+- [ ] knexfile.js created with environment-based config
+
+## Session 1a Handoff
+
+### What is already stabilized
+- **Scoring engine** (`src/engine/scoring.js`, `classification.js`, `gates.js`, `behavioral.js`): 173 tests passing. Pure functions with no DB dependency — these survive the migration unchanged.
+- **Frontend** (`src/App.jsx`, all pages and components): No direct DB access. Talks to Express API only. Survives migration unchanged.
+- **Thesis repo** (`server/db/thesis-repo.js`): UPDATABLE_COLUMNS allowlist tested and safe. Dynamic update builder proven correct. This file gets rewritten to use Knex.
+- **Signal repo** (`server/db/signal-repo.js`): Same pattern as thesis repo. Rewrite to Knex.
+- **API routes** (`server/routes/*.js`): Thin HTTP wrappers over repo functions. Mostly survive — just swap repo imports.
+
+### What must be replaced in Session 1a
+1. `server/db/connection.js` — Replace `better-sqlite3` init with Knex connection pool
+2. `server/db/thesis-repo.js` — Rewrite all `.prepare().run/get/all()` to `knex('theses').where/insert/update`
+3. `server/db/signal-repo.js` — Same treatment
+4. `server/db/schema.sql` — Convert to Knex migration files
+5. `server/db/migrate-scoring-v2.js` and `migrate-source-types.js` — Absorb into Knex migrations
+6. All direct `getDb()` calls in routes and services (see RAW_SQL_INVENTORY.md) — Replace with Knex queries via repo layer
+7. `server/seed-fn.js` — Rewrite inserts using Knex
+
+### What must NOT be carried forward from SQLite assumptions
+- **No `.prepare()` pattern** — Knex uses builder syntax, not prepared statements
+- **No `db.exec()` for DDL** — Use Knex migration files instead
+- **No `JSON.stringify()` for storage** — PostgreSQL JSONB handles objects natively
+- **No `COALESCE` update pattern** — Knex `.update()` only writes provided fields
+- **No `db.pragma()`** — PostgreSQL has its own configuration
+- **No file-based DB path** — PostgreSQL uses host/port/credentials
+- **No `.run()` return value** for changes — Knex `.update()` returns row count; use `.returning('*')` for updated row

@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useThesisStore } from '../store/useThesisStore';
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useThesisStore } from "../store/useThesisStore";
 
 /**
  * Encapsulates thesis evaluation lifecycle:
@@ -36,10 +36,13 @@ export function useThesisEvaluation(thesisId, thesis, signals) {
   }, [thesis, signals, evaluateThesis]);
 
   // Update a single factor score and persist
-  const handleScoreUpdate = useCallback(async (dimension, value) => {
-    const scoreField = `score_${dimension}`;
-    await updateThesis(thesisId, { [scoreField]: value });
-  }, [thesisId, updateThesis]);
+  const handleScoreUpdate = useCallback(
+    async (dimension, value) => {
+      const scoreField = `score_${dimension}`;
+      await updateThesis(thesisId, { [scoreField]: value });
+    },
+    [thesisId, updateThesis],
+  );
 
   // Re-run full evaluation and persist all computed scores
   const handleReScore = useCallback(async () => {
@@ -62,14 +65,18 @@ export function useThesisEvaluation(thesisId, thesis, signals) {
         confidence_level: result.confidence.level,
         confidence_factors: result.confidence.factors,
         classification: result.classification.classification,
-        classification_reason: result.classification.downgrades.length > 0
-          ? result.classification.downgrades.map(d => d.reason).join('; ')
-          : `Score: ${result.scoreResult.composite}`,
+        classification_reason:
+          result.classification.downgrades.length > 0
+            ? result.classification.downgrades.map((d) => d.reason).join("; ")
+            : `Score: ${result.scoreResult.composite}`,
       });
     } catch (err) {
       // Persistence failed — clear the flag so next auto-evaluate runs normally
       reScoreInFlight.current = false;
-      console.error('[useThesisEvaluation] Re-score persistence failed:', err.message);
+      console.error(
+        "[useThesisEvaluation] Re-score persistence failed:",
+        err.message,
+      );
     }
   }, [thesis, signals, thesisId, evaluateThesis, updateThesis]);
 

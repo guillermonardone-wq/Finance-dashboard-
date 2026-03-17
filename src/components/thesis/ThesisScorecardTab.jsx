@@ -1,10 +1,10 @@
-import { LAYERS } from '../../engine/scoring';
+import { LAYERS } from "../../engine/scoring";
 import {
   LayerFactorBreakdown,
   PenaltySummary,
   ConfidenceIndicator,
   GateResultDisplay,
-} from '../common/ScoreDisplay';
+} from "../common/ScoreDisplay";
 
 /**
  * ThesisScorecardTab — Full scoring cockpit (deep mode).
@@ -30,10 +30,13 @@ export default function ThesisScorecardTab({ evaluation, onScoreUpdate }) {
         if (!layerData) return null;
 
         return (
-          <div key={layerKey} className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+          <div
+            key={layerKey}
+            className="bg-slate-900 rounded-lg border border-slate-800 p-4"
+          >
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-sm font-bold text-slate-300">
-                {layerDef.label}{' '}
+                {layerDef.label}{" "}
                 <span className="text-slate-600 font-normal">
                   ({(layerDef.weight * 100).toFixed(0)}%)
                 </span>
@@ -43,9 +46,10 @@ export default function ThesisScorecardTab({ evaluation, onScoreUpdate }) {
               </span>
             </div>
             <p className="text-xs text-slate-600 mb-3">
-              Adjust individual factor scores (0-10). Auto-computed scores update on re-score.
+              Adjust individual factor scores (0-10). Auto-computed scores
+              update on re-score.
             </p>
-            {layerData.breakdown.map(factor => {
+            {layerData.breakdown.map((factor) => {
               const score = evaluation.factorScores[factor.factor];
               const explanation = evaluation.explanations[factor.factor];
 
@@ -60,7 +64,9 @@ export default function ThesisScorecardTab({ evaluation, onScoreUpdate }) {
                       layer={{ breakdown: [factor], missing: [] }}
                     />
                     {explanation && (
-                      <span className="text-xs text-slate-600 ml-2">({explanation})</span>
+                      <span className="text-xs text-slate-600 ml-2">
+                        ({explanation})
+                      </span>
                     )}
                   </div>
                   <input
@@ -68,11 +74,13 @@ export default function ThesisScorecardTab({ evaluation, onScoreUpdate }) {
                     min="0"
                     max="10"
                     step="1"
-                    value={score ?? ''}
-                    onChange={e =>
+                    value={score ?? ""}
+                    onChange={(e) =>
                       onScoreUpdate(
                         factor.factor,
-                        e.target.value === '' ? null : parseFloat(e.target.value)
+                        e.target.value === ""
+                          ? null
+                          : parseFloat(e.target.value),
                       )
                     }
                     className="w-14 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 text-center"
@@ -95,17 +103,25 @@ export default function ThesisScorecardTab({ evaluation, onScoreUpdate }) {
 
       {/* Confidence */}
       <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
-        <h3 className="text-sm font-bold text-slate-300 mb-3">Confidence Assessment</h3>
+        <h3 className="text-sm font-bold text-slate-300 mb-3">
+          Confidence Assessment
+        </h3>
         <ConfidenceIndicator confidence={evaluation.confidence} />
-        <p className="text-xs text-slate-500 mt-2">{evaluation.confidence.explanation}</p>
+        <p className="text-xs text-slate-500 mt-2">
+          {evaluation.confidence.explanation}
+        </p>
       </div>
 
       {/* Signal Independence */}
       {evaluation.independence?.warnings?.length > 0 && (
         <div className="bg-amber-950/10 rounded-lg border border-amber-900/30 p-4">
-          <h3 className="text-sm font-bold text-amber-400 mb-2">Signal Independence Warnings</h3>
+          <h3 className="text-sm font-bold text-amber-400 mb-2">
+            Signal Independence Warnings
+          </h3>
           {evaluation.independence.warnings.map((w, i) => (
-            <p key={i} className="text-xs text-amber-300 py-0.5">- {w}</p>
+            <p key={i} className="text-xs text-amber-300 py-0.5">
+              - {w}
+            </p>
           ))}
         </div>
       )}
@@ -113,12 +129,19 @@ export default function ThesisScorecardTab({ evaluation, onScoreUpdate }) {
       {/* Playbook Matches */}
       {evaluation.playbookMatch?.matches?.length > 0 && (
         <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
-          <h3 className="text-sm font-bold text-slate-300 mb-3">Playbook Matches</h3>
+          <h3 className="text-sm font-bold text-slate-300 mb-3">
+            Playbook Matches
+          </h3>
           {evaluation.playbookMatch.matches.map((m, i) => (
-            <div key={i} className="text-xs text-slate-400 py-1 border-b border-slate-800/30">
+            <div
+              key={i}
+              className="text-xs text-slate-400 py-1 border-b border-slate-800/30"
+            >
               <span className="text-cyan-400">{m.entry.title}</span>
               <span className="text-slate-600 ml-2">match: {m.score}/10</span>
-              <div className="text-slate-600 mt-0.5">{m.reasons.join(', ')}</div>
+              <div className="text-slate-600 mt-0.5">
+                {m.reasons.join(", ")}
+              </div>
             </div>
           ))}
         </div>
@@ -127,9 +150,9 @@ export default function ThesisScorecardTab({ evaluation, onScoreUpdate }) {
       {/* Missing scores */}
       {evaluation.scoreResult.missing.length > 0 && (
         <div className="text-xs text-amber-400 bg-amber-400/5 border border-amber-400/20 rounded p-3">
-          <span className="font-bold">INCOMPLETE:</span>{' '}
-          {evaluation.scoreResult.missing.length} factors not scored.
-          Score all factors for accurate classification.
+          <span className="font-bold">INCOMPLETE:</span>{" "}
+          {evaluation.scoreResult.missing.length} factors not scored. Score all
+          factors for accurate classification.
         </div>
       )}
 

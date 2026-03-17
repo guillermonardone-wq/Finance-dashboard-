@@ -1,11 +1,14 @@
-import { create } from 'zustand';
-import { api } from '../lib/api';
+import { create } from "zustand";
+import { api } from "../lib/api";
 import {
-  computeCompositeScore, computePenalties, autoScoreThesis,
-  estimateConfidence, ALL_FACTOR_KEYS,
-} from '../engine/scoring';
-import { runGates } from '../engine/gates';
-import { classifyThesis } from '../engine/classification';
+  computeCompositeScore,
+  computePenalties,
+  autoScoreThesis,
+  estimateConfidence,
+  ALL_FACTOR_KEYS,
+} from "../engine/scoring";
+import { runGates } from "../engine/gates";
+import { classifyThesis } from "../engine/classification";
 
 export const useThesisStore = create((set, get) => ({
   theses: [],
@@ -35,11 +38,11 @@ export const useThesisStore = create((set, get) => ({
       return thesis;
     } catch (err) {
       // 404s are not-found, not errors — let the UI show the not-found block
-      if (err.message?.includes('not found') || err.message?.includes('404')) {
+      if (err.message?.includes("not found") || err.message?.includes("404")) {
         set({ activeThesis: null, loading: false });
         return null;
       }
-      console.error('[ThesisStore] fetchThesis failed:', err.message);
+      console.error("[ThesisStore] fetchThesis failed:", err.message);
       set({ error: err.message, loading: false });
       return null;
     }
@@ -50,13 +53,15 @@ export const useThesisStore = create((set, get) => ({
     try {
       const thesis = await api.createThesis(data);
       if (!thesis || !thesis.id) {
-        throw new Error('Server returned empty response — thesis may not have been saved');
+        throw new Error(
+          "Server returned empty response — thesis may not have been saved",
+        );
       }
-      console.log('[ThesisStore] Created thesis:', thesis.id, thesis.title);
+      console.log("[ThesisStore] Created thesis:", thesis.id, thesis.title);
       set((state) => ({ theses: [thesis, ...state.theses], loading: false }));
       return thesis;
     } catch (err) {
-      console.error('[ThesisStore] createThesis failed:', err.message);
+      console.error("[ThesisStore] createThesis failed:", err.message);
       set({ error: err.message, loading: false });
       throw err;
     }
@@ -67,8 +72,9 @@ export const useThesisStore = create((set, get) => ({
     try {
       const thesis = await api.updateThesis(id, data);
       set((state) => ({
-        theses: state.theses.map(t => t.id === id ? thesis : t),
-        activeThesis: state.activeThesis?.id === id ? thesis : state.activeThesis,
+        theses: state.theses.map((t) => (t.id === id ? thesis : t)),
+        activeThesis:
+          state.activeThesis?.id === id ? thesis : state.activeThesis,
       }));
       return thesis;
     } catch (err) {
@@ -81,7 +87,7 @@ export const useThesisStore = create((set, get) => ({
     try {
       await api.deleteThesis(id);
       set((state) => ({
-        theses: state.theses.filter(t => t.id !== id),
+        theses: state.theses.filter((t) => t.id !== id),
         activeThesis: state.activeThesis?.id === id ? null : state.activeThesis,
       }));
     } catch (err) {
@@ -100,7 +106,13 @@ export const useThesisStore = create((set, get) => ({
     playbookEntries = [],
   ) => {
     // Step 1: Auto-score all factors from available data
-    const autoResult = autoScoreThesis(thesis, signals, marketObs, predictionMarketAssessment, playbookEntries);
+    const autoResult = autoScoreThesis(
+      thesis,
+      signals,
+      marketObs,
+      predictionMarketAssessment,
+      playbookEntries,
+    );
     const { scores: autoScores, explanations } = autoResult;
 
     // Step 2: Merge auto-scores with manual overrides from thesis
@@ -119,10 +131,18 @@ export const useThesisStore = create((set, get) => ({
     const scoreResult = computeCompositeScore(factorScores, penalties);
 
     // Step 5: Run gates
-    const gateResult = runGates(thesis, executionPlan, signals, checklistAnswers);
+    const gateResult = runGates(
+      thesis,
+      executionPlan,
+      signals,
+      checklistAnswers,
+    );
 
     // Step 6: Inject penalty total for classification penalty-downgrade check
-    const factorScoresWithMeta = { ...factorScores, _penaltyTotal: penalties.total };
+    const factorScoresWithMeta = {
+      ...factorScores,
+      _penaltyTotal: penalties.total,
+    };
 
     // Step 7: Classify with layer scores
     const layerScores = {
@@ -131,11 +151,20 @@ export const useThesisStore = create((set, get) => ({
       market_edge: scoreResult.layers.market_edge,
     };
     const classification = classifyThesis(
-      scoreResult.composite, factorScoresWithMeta, gateResult, thesis, layerScores
+      scoreResult.composite,
+      factorScoresWithMeta,
+      gateResult,
+      thesis,
+      layerScores,
     );
 
     // Step 8: Compute confidence (separate from score)
-    const confidence = estimateConfidence(scoreResult, signals, marketObs, predictionMarketAssessment);
+    const confidence = estimateConfidence(
+      scoreResult,
+      signals,
+      marketObs,
+      predictionMarketAssessment,
+    );
 
     return {
       // Factor-level scores

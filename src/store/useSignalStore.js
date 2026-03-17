@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { api } from '../lib/api';
+import { create } from "zustand";
+import { api } from "../lib/api";
 
 export const useSignalStore = create((set) => ({
   signals: [],
@@ -43,7 +43,7 @@ export const useSignalStore = create((set) => ({
     try {
       const signal = await api.updateSignal(id, data);
       set((state) => ({
-        signals: state.signals.map(s => s.id === id ? signal : s),
+        signals: state.signals.map((s) => (s.id === id ? signal : s)),
       }));
       return signal;
     } catch (err) {
@@ -55,7 +55,7 @@ export const useSignalStore = create((set) => ({
   deleteSignal: async (id) => {
     try {
       await api.deleteSignal(id);
-      set((state) => ({ signals: state.signals.filter(s => s.id !== id) }));
+      set((state) => ({ signals: state.signals.filter((s) => s.id !== id) }));
     } catch (err) {
       set({ error: err.message });
     }
