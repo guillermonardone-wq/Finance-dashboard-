@@ -3,10 +3,8 @@ import cors from 'cors';
 import { existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
 
-dotenv.config();
-
+import config from './config.js';
 import { initDb, getDb } from './db/connection.js';
 import { registry } from './providers/registry.js';
 import { cache } from './services/cache.js';
@@ -22,7 +20,7 @@ import predictionMarketsRouter from './routes/prediction-markets.js';
 import advisoryRouter from './routes/advisory.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PORT = process.env.PORT || 3002;
+const PORT = config.port;
 
 const app = express();
 app.use(cors());
@@ -78,11 +76,24 @@ app.use('/api/advisory', advisoryRouter);
 
 // Health endpoint
 app.get('/api/health', (req, res) => {
+  const db = getDb();
+  let dbOk = false;
+  try {
+    db.prepare('SELECT 1').get();
+    dbOk = true;
+  } catch {}
   res.json({
-    status: 'ok',
+    status: dbOk ? 'ok' : 'degraded',
+    database: dbOk ? 'connected' : 'error',
     providers: registry.getStatus(),
     uptime: process.uptime(),
   });
+});
+
+// Global error handler — catch unhandled route errors
+app.use((err, req, res, _next) => {
+  console.error(`[Server] Unhandled error on ${req.method} ${req.path}:`, err.message);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 app.listen(PORT, () => {

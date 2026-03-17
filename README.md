@@ -1,16 +1,97 @@
-# React + Vite
+# Signal Forge
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A macro decision engine for tracking geopolitical and economic signals, developing investment theses, and scoring them through a three-layer evaluation framework.
 
-Currently, two official plugins are available:
+## What it does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Signal Inbox** — Collect signals from manual entry, FRED (Federal Reserve data), and GDELT (geopolitical news monitoring). Quick-add box for pasting headlines/URLs.
+- **Thesis Builder** — Create structured investment theses with causal chains, probability ranges, affected assets, and counter-cases.
+- **Three-Layer Scoring Engine** — Evidence (40%) + Structural Logic (35%) + Market Edge (25%). 15 scoring factors with auto-computation from linked data.
+- **Behavioral Gates** — Mandatory disconfirmation, probability bounds, sleep-on-it checks. Prevents overconfident positioning.
+- **Signal-to-Thesis Flow** — Link signals as evidence, bulk-link from inbox, auto-score updates.
+- **Prediction Market Integration** — Link thesis to prediction market contracts, compute divergence assessment.
+- **LLM Advisory** — Optional second-opinion evaluation (advisory only, cannot override deterministic scoring).
 
-## React Compiler
+## Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Layer | Tech |
+|-------|------|
+| Frontend | React 19, Vite, Zustand, TailwindCSS |
+| Backend | Express 5, Node.js |
+| Database | SQLite (better-sqlite3, WAL mode) |
+| Testing | Vitest + legacy Node.js test runner |
 
-## Expanding the ESLint configuration
+## Local setup
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+# Install dependencies
+npm install
+
+# Copy and configure environment variables
+cp .env.example .env
+# Edit .env — add API keys for providers you want to use (all optional)
+
+# Start dev server (client + API server)
+npm run dev
+
+# Or run separately:
+npm run dev:client   # Vite dev server (port 5173, proxies /api to 3002)
+npm run dev:server   # Express API server (port 3002)
+```
+
+The database auto-creates and seeds on first run. No manual setup required.
+
+## Environment variables
+
+See `.env.example` for the full list. Key variables:
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `PORT` | API server port | 3002 |
+| `DB_PATH` | SQLite database path | `./data/decision-engine.db` |
+| `FRED_API_KEY` | Federal Reserve data | (disabled without key) |
+| `FINNHUB_API_KEY` | Market data, FX, news | (disabled without key) |
+| `NEWSAPI_API_KEY` | News headlines | (disabled without key) |
+| `ALPHA_VANTAGE_API_KEY` | Price data | (disabled without key) |
+| `ANTHROPIC_API_KEY` | LLM advisory evaluation | (disabled without key) |
+| `FRED_SIGNAL_THRESHOLD_MULT` | Std dev multiplier for FRED signal generation | 1.0 |
+| `GDELT_SPIKE_MULTIPLIER` | Volume spike multiplier for GDELT signals | 2.0 |
+
+All API keys are optional. The app runs fully without any external providers.
+
+## Running tests
+
+```bash
+# Run thesis workflow + scoring engine tests (vitest)
+npm test
+
+# Run legacy provider/normalization tests
+npm run test:legacy
+
+# Watch mode
+npm run test:watch
+```
+
+## What is currently implemented
+
+- Signal Inbox as landing page with Quick Add, FRED auto-signals, GDELT monitoring
+- Thesis creation (Quick Capture drafts + full form)
+- Signal-to-thesis linking (single + bulk)
+- Three-layer scoring engine with 15 factors, 6 penalty types, confidence estimation
+- Classification system (IGNORE -> WATCH -> DEVELOP -> PAPER_TRADE -> SMALL_POSITION -> FULLY_QUALIFIED)
+- Behavioral gate enforcement (disconfirmation, probability bounds)
+- Prediction market contract linking + divergence assessment
+- LLM advisory evaluation (Claude/GPT-4, advisory-only)
+- ThesisDetail workspace with tabs: Overview, Evidence, Prediction Markets, LLM Review, Scorecard, Checklist, Audit Log
+- Signal count badges in navigation
+- Provider adapters: FRED, Finnhub, Alpha Vantage, NewsAPI, World Bank Data360
+- Background scheduler for data refresh
+
+## What is intentionally not implemented yet
+
+- PostgreSQL / Knex (currently SQLite — DB access is isolated in `server/db/*-repo.js` for future migration)
+- Authentication / multi-user
+- Trade execution tracking
+- Research lab / social features
+- Full pre-trade checklist UI
+- Dead letter queue for failed provider calls
