@@ -29,44 +29,77 @@ export default function ThesisOverviewTab({ thesis, signals, evaluation }) {
   const supportingCount = signals.length;
   const sourceTypes = [...new Set(signals.map(s => s.source_type).filter(Boolean))];
   const categories = [...new Set(signals.map(s => s.category).filter(Boolean))];
-  const hasDisconfirmation = !!(thesis.strongest_bear_case || thesis.what_would_make_opposite_stronger);
+
+  // Evidence quality warnings
+  const warnings = [];
+  if (signals.length === 0) warnings.push('No signals linked');
+  else if (signals.length < 3) warnings.push('Thin evidence — needs more signals');
+  if (sourceTypes.length === 1 && signals.length > 0) warnings.push('Single-source risk');
+  const oldestSignal = signals.length > 0
+    ? Math.max(...signals.map(s => (Date.now() - new Date(s.created_at).getTime()) / 86400000))
+    : 0;
+  if (oldestSignal > 7) warnings.push('Evidence aging (>7 days)');
+
   const missingEvidence = [];
   if (!thesis.strongest_bear_case) missingEvidence.push('strongest bear case');
   if (!thesis.what_would_make_opposite_stronger) missingEvidence.push('counter-scenario');
   if (invalidating.length === 0) missingEvidence.push('invalidation conditions');
-  if (signals.length === 0) missingEvidence.push('linked signals');
   if (chain.length === 0) missingEvidence.push('causal chain');
 
   return (
     <div className="space-y-6">
       {/* BRIEFING PANEL */}
       <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
-        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-3">Thesis Briefing</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-xs">
-          <BriefingRow label="Core claim" value={thesis.thesis_statement || 'Not stated'} />
-          <BriefingRow label="Supporting evidence"
-            value={supportingCount > 0
-              ? `${supportingCount} signal${supportingCount !== 1 ? 's' : ''} from ${sourceTypes.length} source type${sourceTypes.length !== 1 ? 's' : ''}`
-              : 'No signals linked'
-            }
-            warn={supportingCount === 0}
-          />
-          <BriefingRow label="Main contradiction"
-            value={thesis.strongest_bear_case || 'Not written'}
-            warn={!thesis.strongest_bear_case}
-          />
-          <BriefingRow label="Missing evidence"
-            value={missingEvidence.length > 0 ? missingEvidence.join(', ') : 'None identified'}
-            warn={missingEvidence.length > 0}
-          />
-          <BriefingRow label="Assets affected"
-            value={assets.length > 0 ? assets.map(a => `${a.asset} (${a.direction})`).join(', ') : 'Not specified'}
-          />
-          <BriefingRow label="Time horizon" value={formatTimeline(thesis)} />
-          <BriefingRow label="Probability" value={formatProbability(thesis)} />
-          <BriefingRow label="Categories"
-            value={categories.length > 0 ? categories.map(c => c.replace(/_/g, ' ')).join(', ') : 'None'}
-          />
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider">Thesis Briefing</h3>
+          <div className="flex gap-1">
+            <span className={`text-xs px-2 py-0.5 rounded ${thesis.classification === 'WATCH' ? 'bg-blue-500/10 text-blue-400' : thesis.classification === 'DEVELOP' || thesis.classification === 'DEVELOP_THESIS' ? 'bg-amber-500/10 text-amber-400' : thesis.classification === 'ESCALATE' ? 'bg-red-500/10 text-red-400' : 'bg-slate-700 text-slate-400'}`}>{thesis.classification}</span>
+            {thesis.composite_score != null && (
+              <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">{thesis.composite_score.toFixed(0)}/100</span>
+            )}
+          </div>
+        </div>
+
+        {/* Core claim */}
+        <p className="text-sm text-slate-300 mb-3">{thesis.thesis_statement || 'No thesis statement'}</p>
+
+        {/* Top evidence */}
+        <div className="mb-3">
+          <p className="text-xs text-slate-500 mb-1">Supporting Evidence: {supportingCount} signal{supportingCount !== 1 ? 's' : ''}{sourceTypes.length > 0 ? ` from ${sourceTypes.join(', ')}` : ''}</p>
+          {signals.slice(0, 3).map(s => (
+            <div key={s.id} className="flex items-center gap-2 py-0.5 text-xs">
+              <SignalFreshnessDot dateStr={s.created_at} />
+              <span className="text-slate-400 truncate">{s.title}</span>
+              <span className="text-slate-600 shrink-0">{s.source_type === 'news_feed' ? 'news' : s.source_type}</span>
+            </div>
+          ))}
+          {signals.length > 3 && <p className="text-xs text-slate-600 mt-0.5">+{signals.length - 3} more signals</p>}
+        </div>
+
+        {/* Warnings + gaps */}
+        {(warnings.length > 0 || missingEvidence.length > 0) && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {warnings.map((w, i) => (
+              <span key={i} className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">{w}</span>
+            ))}
+            {missingEvidence.map((m, i) => (
+              <span key={i} className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded">Missing: {m}</span>
+            ))}
+          </div>
+        )}
+
+        {/* Counter-case */}
+        <div className="text-xs">
+          <span className="text-slate-500">Counter-case: </span>
+          <span className={thesis.strongest_bear_case ? 'text-slate-400' : 'text-amber-400'}>{thesis.strongest_bear_case || 'Not defined'}</span>
+        </div>
+
+        {/* Compact metrics row */}
+        <div className="flex gap-4 mt-3 text-xs text-slate-500 border-t border-slate-800 pt-2">
+          <span>Horizon: {formatTimeline(thesis)}</span>
+          <span>Prob: {formatProbability(thesis)}</span>
+          {assets.length > 0 && <span>Assets: {assets.map(a => a.asset).join(', ')}</span>}
+          <span>Created: {new Date(thesis.created_at).toLocaleDateString()}</span>
         </div>
       </div>
 
@@ -286,13 +319,11 @@ export default function ThesisOverviewTab({ thesis, signals, evaluation }) {
 
 // --- Briefing helper ---
 
-function BriefingRow({ label, value, warn }) {
-  return (
-    <div className="flex gap-2 py-1">
-      <span className="text-slate-500 whitespace-nowrap w-32 shrink-0">{label}</span>
-      <span className={`${warn ? 'text-amber-400' : 'text-slate-300'} line-clamp-1`}>{value}</span>
-    </div>
-  );
+function SignalFreshnessDot({ dateStr }) {
+  if (!dateStr) return <span className="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block" />;
+  const hours = (Date.now() - new Date(dateStr).getTime()) / 3600000;
+  const color = hours < 4 ? 'bg-emerald-400' : hours < 24 ? 'bg-amber-400' : hours < 168 ? 'bg-orange-400' : 'bg-slate-600';
+  return <span className={`w-1.5 h-1.5 rounded-full ${color} inline-block shrink-0`} />;
 }
 
 // --- Helper components ---

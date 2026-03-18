@@ -36,6 +36,7 @@ const CATEGORY_LABELS = {
 
 export default function ChecklistTab({ thesis }) {
   const [answers, setAnswers] = useState({});
+  const [showFullChecklist, setShowFullChecklist] = useState(false);
   const [collapsedCats, setCollapsedCats] = useState(new Set());
 
   const result = useMemo(() => runChecklist(answers), [answers]);
@@ -167,8 +168,16 @@ export default function ChecklistTab({ thesis }) {
         </div>
       )}
 
+      {/* Full checklist toggle */}
+      <button
+        onClick={() => setShowFullChecklist(!showFullChecklist)}
+        className="w-full text-left px-3 py-2 rounded border border-slate-800 text-xs text-slate-500 hover:text-slate-300 hover:border-slate-700 transition-colors"
+      >
+        {showFullChecklist ? '▲ Hide full checklist' : `▼ Expand full checklist (${result.items.length} items)`}
+      </button>
+
       {/* Checklist items by category — sorted by priority, collapsible */}
-      {sortedCategories.map(([category, items]) => {
+      {showFullChecklist && sortedCategories.map(([category, items]) => {
         const isCollapsed = collapsedCats.has(category);
         const failCount = items.filter(i => i.status === 'failed').length;
         const passCount = items.filter(i => i.status === 'passed').length;
@@ -311,3 +320,5 @@ export default function ChecklistTab({ thesis }) {
     </div>
   );
 }
+
+// Exported for backwards compat (ChecklistTab is the only export)

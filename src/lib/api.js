@@ -22,6 +22,8 @@ export const api = {
   updateThesis: (id, data) =>
     request(`/theses/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteThesis: (id) => request(`/theses/${id}`, { method: "DELETE" }),
+  createThesisFromCluster: (data) =>
+    request("/theses/from-cluster", { method: "POST", body: JSON.stringify(data) }),
 
   // Signals
   getSignals: (params) =>

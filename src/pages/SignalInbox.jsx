@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSignalStore } from '../store/useSignalStore';
 import { useThesisStore } from '../store/useThesisStore';
@@ -51,7 +51,23 @@ export default function SignalInbox() {
   const [linkingSignalId, setLinkingSignalId] = useState(null);
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [expandedSignal, setExpandedSignal] = useState(null);
   const quickInputRef = useRef(null);
+
+  // "New since last visit" tracking
+  const newSinceLastVisit = useMemo(() => {
+    const lastVisit = localStorage.getItem('sf_inbox_last_visit');
+    if (!lastVisit || !signals.length) return 0;
+    const lastVisitTime = new Date(lastVisit).getTime();
+    return signals.filter(s => new Date(s.created_at).getTime() > lastVisitTime).length;
+  }, [signals]);
+
+  // Update last visit timestamp
+  useEffect(() => {
+    if (signals.length > 0) {
+      localStorage.setItem('sf_inbox_last_visit', new Date().toISOString());
+    }
+  }, [activeFilter]); // only on filter change, not on every render
 
   const currentStatusFilter = STATUS_FILTERS.find(f => f.label === activeFilter);
 
@@ -182,8 +198,15 @@ export default function SignalInbox() {
     <div className="p-6 max-w-5xl">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-100">Signal Inbox</h1>
-        <p className="text-sm text-slate-500 mt-1">New signals that need your attention. Capture observations fast. Grant legitimacy slowly.</p>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-slate-100">Signal Inbox</h1>
+          {newSinceLastVisit > 0 && (
+            <span className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-1 rounded-full font-medium">
+              +{newSinceLastVisit} new
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-slate-500 mt-1">Capture observations fast. Grant legitimacy slowly.</p>
       </div>
 
       {/* Quick Add Signal */}
@@ -361,7 +384,9 @@ export default function SignalInbox() {
 
       {/* Signal list — newest first */}
       <div className="space-y-2">
-        {signals.map(signal => (
+        {signals.map(signal => {
+          const isExpanded = expandedSignal === signal.id;
+          return (
           <div key={signal.id} className={`bg-slate-900 rounded-lg border p-4 hover:border-slate-700 transition-colors ${
             selectedIds.has(signal.id) ? 'border-cyan-500/50' : 'border-slate-800'
           }`}>
@@ -378,9 +403,10 @@ export default function SignalInbox() {
                 </div>
               )}
 
-              <div className="flex-1 min-w-0">
-                {/* Title row */}
+              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpandedSignal(isExpanded ? null : signal.id)}>
+                {/* Compact row: freshness dot + title + badges */}
                 <div className="flex items-center gap-2">
+                  <FreshnessDot dateStr={signal.created_at} />
                   <h3 className="text-sm font-medium text-slate-200 truncate">{signal.title}</h3>
                   {signal.direction && signal.direction !== 'neutral' && (
                     <DirectionBadge direction={signal.direction} />
@@ -392,51 +418,29 @@ export default function SignalInbox() {
                   )}
                 </div>
 
-                {/* Summary or description */}
-                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{signal.summary || signal.description}</p>
-
-                {/* Metadata row */}
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                {/* Compact metadata: source + category + freshness text + strength */}
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <SourceBadge type={signal.source_type} />
-                  {signal.entity && (
-                    <span className="text-xs font-mono bg-slate-800 text-cyan-400 px-1.5 py-0.5 rounded">
-                      {signal.entity}
-                    </span>
-                  )}
-                  <FreshnessBadge dateStr={signal.created_at} />
                   {signal.category && signal.category !== 'other' && (
                     <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
                       {signal.category.replace(/_/g, ' ')}
                     </span>
                   )}
+                  <FreshnessBadge dateStr={signal.created_at} />
                   {signal.reliability && signal.reliability !== 'unverified' && (
                     <ReliabilityBadge level={signal.reliability} />
                   )}
                   {signal.signal_strength != null && signal.signal_strength > 0 && (
                     <StrengthDots strength={signal.signal_strength} />
                   )}
-                  {signal.value != null && (
-                    <span className="text-xs text-slate-500 font-mono">
-                      {signal.value.toFixed(2)}{signal.change != null ? ` (${signal.change >= 0 ? '+' : ''}${signal.change.toFixed(2)})` : ''}
-                    </span>
-                  )}
-                  {signal.source_url && (
-                    <a
-                      href={signal.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-cyan-500 hover:text-cyan-400 truncate max-w-[200px]"
-                    >
-                      source
-                    </a>
-                  )}
                   {signal.tags?.includes('consolidated') && (
                     <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded">corroborated</span>
                   )}
                 </div>
+
                 {/* Why it matters — contextual one-liner */}
                 {signal.category && signal.category !== 'other' && signal.direction && signal.direction !== 'neutral' && (
-                  <p className="text-xs text-slate-600 mt-1.5 italic">
+                  <p className="text-xs text-slate-600 mt-1 italic">
                     {whyItMatters(signal)}
                   </p>
                 )}
@@ -457,7 +461,7 @@ export default function SignalInbox() {
                       onClick={() => setLinkingSignalId(linkingSignalId === signal.id ? null : signal.id)}
                       className="px-2 py-1 rounded text-xs transition-colors text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20"
                     >
-                      Link to Thesis
+                      Link
                     </button>
                     <StatusBtn label="Dismiss" onClick={() => handleStatusChange(signal.id, 'noise')} color="red" />
                   </>
@@ -475,6 +479,33 @@ export default function SignalInbox() {
                 )}
               </div>
             </div>
+
+            {/* Expandable detail panel */}
+            {isExpanded && (
+              <div className="mt-3 pt-3 border-t border-slate-800 space-y-2">
+                <p className="text-xs text-slate-400">{signal.summary || signal.description}</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  {signal.entity && (
+                    <div><span className="text-slate-600">Entity:</span> <span className="text-cyan-400 font-mono">{signal.entity}</span></div>
+                  )}
+                  {signal.value != null && (
+                    <div><span className="text-slate-600">Value:</span> <span className="text-slate-300 font-mono">{signal.value.toFixed(2)}{signal.change != null ? ` (${signal.change >= 0 ? '+' : ''}${signal.change.toFixed(2)})` : ''}</span></div>
+                  )}
+                  {signal.source_attribution && (
+                    <div><span className="text-slate-600">Source:</span> <span className="text-slate-400">{signal.source_attribution}</span></div>
+                  )}
+                  {signal.source_url && (
+                    <div><span className="text-slate-600">URL:</span> <a href={signal.source_url} target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:text-cyan-400 truncate">{signal.source_url.slice(0, 60)}</a></div>
+                  )}
+                  {signal.source_provider && (
+                    <div><span className="text-slate-600">Provider:</span> <span className="text-slate-400">{signal.source_provider}</span></div>
+                  )}
+                  {signal.novelty && (
+                    <div><span className="text-slate-600">Novelty:</span> <span className="text-slate-400">{signal.novelty}</span></div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Link to Thesis dropdown */}
             {linkingSignalId === signal.id && (
@@ -499,7 +530,8 @@ export default function SignalInbox() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
         {signals.length === 0 && (
           <p className="text-sm text-slate-600 text-center py-12">No signals in this view.</p>
         )}
@@ -553,6 +585,14 @@ function StatusBtn({ label, onClick, color = 'slate' }) {
       {label}
     </button>
   );
+}
+
+function FreshnessDot({ dateStr }) {
+  if (!dateStr) return <span className="w-2 h-2 rounded-full bg-slate-600 inline-block" />;
+  const hours = (Date.now() - new Date(dateStr).getTime()) / 3600000;
+  const color = hours < 4 ? 'bg-emerald-400' : hours < 24 ? 'bg-amber-400' : hours < 168 ? 'bg-orange-400' : 'bg-slate-600';
+  const title = hours < 4 ? 'Fresh (<4h)' : hours < 24 ? 'Recent (<24h)' : hours < 168 ? 'Aging (1-7d)' : 'Stale (>7d)';
+  return <span className={`w-2 h-2 rounded-full ${color} inline-block shrink-0`} title={title} />;
 }
 
 function FreshnessBadge({ dateStr }) {
