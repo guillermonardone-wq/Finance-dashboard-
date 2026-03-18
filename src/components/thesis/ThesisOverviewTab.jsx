@@ -25,7 +25,51 @@ export default function ThesisOverviewTab({ thesis, signals, evaluation }) {
     ? thesis.invalidating_indicators
     : [];
 
+  // Derive briefing data
+  const supportingCount = signals.length;
+  const sourceTypes = [...new Set(signals.map(s => s.source_type).filter(Boolean))];
+  const categories = [...new Set(signals.map(s => s.category).filter(Boolean))];
+  const hasDisconfirmation = !!(thesis.strongest_bear_case || thesis.what_would_make_opposite_stronger);
+  const missingEvidence = [];
+  if (!thesis.strongest_bear_case) missingEvidence.push('strongest bear case');
+  if (!thesis.what_would_make_opposite_stronger) missingEvidence.push('counter-scenario');
+  if (invalidating.length === 0) missingEvidence.push('invalidation conditions');
+  if (signals.length === 0) missingEvidence.push('linked signals');
+  if (chain.length === 0) missingEvidence.push('causal chain');
+
   return (
+    <div className="space-y-6">
+      {/* BRIEFING PANEL */}
+      <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+        <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-3">Thesis Briefing</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+          <BriefingRow label="Core claim" value={thesis.thesis_statement || 'Not stated'} />
+          <BriefingRow label="Supporting evidence"
+            value={supportingCount > 0
+              ? `${supportingCount} signal${supportingCount !== 1 ? 's' : ''} from ${sourceTypes.length} source type${sourceTypes.length !== 1 ? 's' : ''}`
+              : 'No signals linked'
+            }
+            warn={supportingCount === 0}
+          />
+          <BriefingRow label="Main contradiction"
+            value={thesis.strongest_bear_case || 'Not written'}
+            warn={!thesis.strongest_bear_case}
+          />
+          <BriefingRow label="Missing evidence"
+            value={missingEvidence.length > 0 ? missingEvidence.join(', ') : 'None identified'}
+            warn={missingEvidence.length > 0}
+          />
+          <BriefingRow label="Assets affected"
+            value={assets.length > 0 ? assets.map(a => `${a.asset} (${a.direction})`).join(', ') : 'Not specified'}
+          />
+          <BriefingRow label="Time horizon" value={formatTimeline(thesis)} />
+          <BriefingRow label="Probability" value={formatProbability(thesis)} />
+          <BriefingRow label="Categories"
+            value={categories.length > 0 ? categories.map(c => c.replace(/_/g, ' ')).join(', ') : 'None'}
+          />
+        </div>
+      </div>
+
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* LEFT COLUMN — The Thesis Memo (2/3 width) */}
       <div className="lg:col-span-2 space-y-5">
@@ -235,6 +279,18 @@ export default function ThesisOverviewTab({ thesis, signals, evaluation }) {
           </div>
         )}
       </div>
+    </div>
+    </div>
+  );
+}
+
+// --- Briefing helper ---
+
+function BriefingRow({ label, value, warn }) {
+  return (
+    <div className="flex gap-2 py-1">
+      <span className="text-slate-500 whitespace-nowrap w-32 shrink-0">{label}</span>
+      <span className={`${warn ? 'text-amber-400' : 'text-slate-300'} line-clamp-1`}>{value}</span>
     </div>
   );
 }

@@ -403,14 +403,17 @@ export default function SignalInbox() {
                       {signal.entity}
                     </span>
                   )}
-                  <span className="text-xs text-slate-600">{timeAgo(signal.created_at)}</span>
+                  <FreshnessBadge dateStr={signal.created_at} />
                   {signal.category && signal.category !== 'other' && (
                     <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
                       {signal.category.replace(/_/g, ' ')}
                     </span>
                   )}
-                  {signal.novelty === 'new' && (
-                    <span className="text-xs text-amber-400">new</span>
+                  {signal.reliability && signal.reliability !== 'unverified' && (
+                    <ReliabilityBadge level={signal.reliability} />
+                  )}
+                  {signal.signal_strength != null && signal.signal_strength > 0 && (
+                    <StrengthDots strength={signal.signal_strength} />
                   )}
                   {signal.value != null && (
                     <span className="text-xs text-slate-500 font-mono">
@@ -427,7 +430,16 @@ export default function SignalInbox() {
                       source
                     </a>
                   )}
+                  {signal.tags?.includes('consolidated') && (
+                    <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded">corroborated</span>
+                  )}
                 </div>
+                {/* Why it matters — contextual one-liner */}
+                {signal.category && signal.category !== 'other' && signal.direction && signal.direction !== 'neutral' && (
+                  <p className="text-xs text-slate-600 mt-1.5 italic">
+                    {whyItMatters(signal)}
+                  </p>
+                )}
               </div>
 
               {/* Actions */}
@@ -541,4 +553,55 @@ function StatusBtn({ label, onClick, color = 'slate' }) {
       {label}
     </button>
   );
+}
+
+function FreshnessBadge({ dateStr }) {
+  if (!dateStr) return null;
+  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  let label, color;
+  if (mins < 60) { label = `${mins}m`; color = 'text-emerald-400'; }
+  else if (mins < 1440) { label = `${Math.floor(mins / 60)}h`; color = 'text-slate-400'; }
+  else { label = `${Math.floor(mins / 1440)}d`; color = 'text-slate-600'; }
+  return <span className={`text-xs ${color}`}>{label}</span>;
+}
+
+function ReliabilityBadge({ level }) {
+  const styles = {
+    verified: 'text-emerald-400',
+    likely: 'text-blue-400',
+    disputed: 'text-red-400',
+  };
+  return <span className={`text-xs ${styles[level] || 'text-slate-500'}`}>{level}</span>;
+}
+
+function StrengthDots({ strength }) {
+  const filled = Math.round(strength * 5);
+  return (
+    <span className="text-xs tracking-wider" title={`Strength: ${(strength * 100).toFixed(0)}%`}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <span key={i} className={i < filled ? 'text-cyan-400' : 'text-slate-700'}>|</span>
+      ))}
+    </span>
+  );
+}
+
+const CATEGORY_CONTEXT = {
+  energy_bottleneck: 'Supply disruption risk for energy-linked assets',
+  geopolitical_escalation: 'Escalation pressure on risk assets and defense sector',
+  military_mobilization: 'Conflict intensity affecting regional stability',
+  central_bank_action: 'Monetary policy shift affecting rates and equities',
+  currency_instability: 'FX stress impacting trade and EM positioning',
+  credit_stress: 'Credit conditions tightening, affects borrowers and yields',
+  sanctions_risk: 'Trade restriction risk for affected economies',
+  shipping_disruption: 'Supply chain disruption risk for commodity flows',
+  commodity_chokepoint: 'Physical supply constraint on raw materials',
+  policy_shock: 'Macro policy change affecting growth outlook',
+  market_complacency: 'Risk sentiment divergence from fundamentals',
+};
+
+function whyItMatters(signal) {
+  const base = CATEGORY_CONTEXT[signal.category];
+  if (!base) return null;
+  const dir = signal.direction === 'bearish' ? 'Bearish signal' : signal.direction === 'bullish' ? 'Bullish signal' : 'Signal';
+  return `${dir}: ${base.toLowerCase()}.`;
 }

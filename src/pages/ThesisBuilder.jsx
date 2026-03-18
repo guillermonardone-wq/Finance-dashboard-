@@ -37,7 +37,21 @@ export default function ThesisBuilder() {
     let form = { ...EMPTY_THESIS };
     let label = null;
 
-    if (state?.fromSignal) {
+    if (state?.fromBotCluster) {
+      // From Bot Feed cluster → rich prefill
+      const c = state.fromBotCluster;
+      form = {
+        ...form,
+        title: c.title || '',
+        thesis_statement: c.thesis_statement || '',
+        strongest_bear_case: c.strongest_bear_case || '',
+      };
+      label = `from bot cluster: ${c.title?.slice(0, 50)}`;
+      // Also link any signals from the cluster
+      if (state.fromSignals) {
+        for (const s of state.fromSignals) ids.push(s.id);
+      }
+    } else if (state?.fromSignal) {
       // Single signal → pre-fill title & description
       const s = state.fromSignal;
       ids.push(s.id);

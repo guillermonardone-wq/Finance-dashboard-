@@ -4,14 +4,14 @@ import { useSignalStore } from '../../store/useSignalStore';
 
 const PRIMARY_NAV = [
   { to: '/',           label: 'Signal Inbox',      icon: '⚡', countKey: 'inbox' },
-  { to: '/thesis/new', label: 'Quick Capture',     icon: '+' },
+  { to: '/bot',        label: 'Bot Feed',          icon: '⚙' },
+  { to: '/dashboard',  label: 'Thesis Hub',        icon: '◉' },
   { to: '/theses',     label: 'Theses',            icon: '◈' },
   { to: '/market',     label: 'Market Context',    icon: '◆' },
-  { to: '/dashboard',  label: 'Thesis Hub',        icon: '◉' },
 ];
 
 const SECONDARY_NAV = [
-  { to: '/bot',        label: 'Bot Feed',          icon: '⚙' },
+  { to: '/thesis/new', label: 'Quick Capture',     icon: '+' },
   { to: '/reviews',    label: 'Reviews',           icon: '◇' },
   { to: '/quarantine', label: 'Quarantine',        icon: '⊘' },
   { to: '/providers',  label: 'Providers',         icon: '●' },

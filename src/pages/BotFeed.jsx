@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
 const STATE_COLORS = {
@@ -16,10 +17,46 @@ const STATE_ICONS = {
 };
 
 export default function BotFeed() {
+  const navigate = useNavigate();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState(null);
+
+  // Create draft thesis from a bot analysis cluster
+  const handleCreateThesis = (analysis) => {
+    const { cluster, recommendation, counter_case } = analysis;
+    const signals = (cluster.signals || []).map(s => ({
+      id: s.id,
+      title: s.title,
+      description: s.description || s.summary || '',
+      category: s.category,
+      source_type: s.source_type,
+    }));
+
+    // Infer timeframe from cluster context
+    const timeframe = cluster.time_span || null;
+
+    // Build prefilled thesis data
+    const prefill = {
+      title: cluster.title || 'Untitled cluster',
+      thesis_statement: cluster.summary || '',
+      category: cluster.primary_category || signals[0]?.category || 'other',
+      strongest_bear_case: counter_case?.strongest_opposing_case || '',
+    };
+
+    // If we have affected geographies or assets from the cluster
+    if (cluster.primary_geographies?.length) {
+      prefill.region = cluster.primary_geographies.join(', ');
+    }
+
+    navigate('/thesis/new', {
+      state: {
+        fromBotCluster: prefill,
+        fromSignals: signals,
+      },
+    });
+  };
 
   const runScan = async () => {
     setLoading(true);
@@ -79,7 +116,7 @@ export default function BotFeed() {
         <div className="bg-red-950/20 rounded-lg border border-red-900/30 p-4 mb-6">
           <h2 className="text-sm font-bold text-red-400 uppercase tracking-wider mb-3">Escalations — Requires Immediate Review</h2>
           {result.analyses.filter(a => a.recommendation.recommended_state === 'ESCALATE').map((analysis, i) => (
-            <AnalysisCard key={i} analysis={analysis} expanded={expanded === `e-${i}`} onToggle={() => setExpanded(expanded === `e-${i}` ? null : `e-${i}`)} />
+            <AnalysisCard key={i} analysis={analysis} expanded={expanded === `e-${i}`} onToggle={() => setExpanded(expanded === `e-${i}` ? null : `e-${i}`)} onCreateThesis={handleCreateThesis} />
           ))}
         </div>
       )}
@@ -88,7 +125,7 @@ export default function BotFeed() {
       {result?.analyses && (
         <div className="space-y-3">
           {result.analyses.filter(a => a.recommendation.recommended_state !== 'ESCALATE').map((analysis, i) => (
-            <AnalysisCard key={i} analysis={analysis} expanded={expanded === `a-${i}`} onToggle={() => setExpanded(expanded === `a-${i}` ? null : `a-${i}`)} />
+            <AnalysisCard key={i} analysis={analysis} expanded={expanded === `a-${i}`} onToggle={() => setExpanded(expanded === `a-${i}` ? null : `a-${i}`)} onCreateThesis={handleCreateThesis} />
           ))}
         </div>
       )}
@@ -103,10 +140,11 @@ export default function BotFeed() {
   );
 }
 
-function AnalysisCard({ analysis, expanded, onToggle }) {
+function AnalysisCard({ analysis, expanded, onToggle, onCreateThesis }) {
   const { cluster, recommendation, pattern_match, mispricing_assessment, counter_case } = analysis;
   const stateColor = STATE_COLORS[recommendation.recommended_state] || STATE_COLORS.LOG_ONLY;
   const icon = STATE_ICONS[recommendation.recommended_state] || '·';
+  const isActionable = ['ESCALATE', 'DEVELOP_THESIS'].includes(recommendation.recommended_state);
 
   return (
     <div className={`bg-slate-900 rounded-lg border p-4 ${recommendation.recommended_state === 'ESCALATE' ? 'border-red-900/50' : 'border-slate-800'}`}>
@@ -118,20 +156,43 @@ function AnalysisCard({ analysis, expanded, onToggle }) {
               {icon} {recommendation.recommended_state}
             </span>
             <span className="text-xs text-slate-500">
-              {cluster.signal_count} signals, {cluster.independent_source_count} independent sources
+              {cluster.signal_count} signal{cluster.signal_count !== 1 ? 's' : ''}, {cluster.independent_source_count} source{cluster.independent_source_count !== 1 ? 's' : ''}
             </span>
+            {cluster.primary_category && (
+              <span className="text-xs bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">{cluster.primary_category.replace(/_/g, ' ')}</span>
+            )}
           </div>
           <h3 className="text-sm font-medium text-slate-200">{cluster.title}</h3>
           <p className="text-xs text-slate-500 mt-1 line-clamp-2">{cluster.summary}</p>
         </div>
-        <div className="text-right">
+        <div className="text-right flex flex-col items-end gap-1">
           <span className="text-xs text-slate-600">strength: {cluster.cluster_strength}</span>
-          <br />
           <span className="text-xs text-slate-600">
             confidence: {((recommendation.confidence_range?.best || 0) * 100).toFixed(0)}%
           </span>
+          {isActionable && onCreateThesis && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCreateThesis(analysis); }}
+              className="mt-1 px-3 py-1.5 rounded text-xs font-bold transition-colors bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20"
+            >
+              Draft Thesis
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Signal details + Delta indicators */}
+      {cluster.signals && cluster.signals.length > 0 && (
+        <div className="mt-3 flex items-center gap-3 text-xs text-slate-600">
+          <span>{cluster.signals.length} signal{cluster.signals.length !== 1 ? 's' : ''}</span>
+          {cluster.primary_category && <span className="text-slate-500">{cluster.primary_geographies?.join(', ') || ''}</span>}
+          {cluster.cluster_strength >= 4 && <DeltaTag label="strong cluster" direction="up" />}
+          {cluster.signal_count >= 5 && <DeltaTag label="high volume" direction="up" />}
+          {recommendation.confidence_range?.best >= 0.7 && <DeltaTag label="high confidence" direction="up" />}
+          {recommendation.confidence_range?.best < 0.3 && <DeltaTag label="low confidence" direction="down" />}
+          {(recommendation.penalties_applied || []).length >= 2 && <DeltaTag label="heavily penalized" direction="down" />}
+        </div>
+      )}
 
       {/* Why Not Higher — ALWAYS VISIBLE */}
       <div className="mt-3 bg-slate-800/50 rounded p-2.5 border border-slate-700/30">
@@ -293,5 +354,17 @@ function SummaryStat({ label, value, color }) {
       <p className={`text-lg font-bold ${colorClass}`}>{value}</p>
       <p className="text-xs text-slate-600">{label}</p>
     </div>
+  );
+}
+
+function DeltaTag({ label, direction }) {
+  const isUp = direction === 'up';
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded ${
+      isUp ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+           : 'bg-red-500/10 text-red-400 border border-red-500/20'
+    }`}>
+      {isUp ? '\u25B2' : '\u25BC'} {label}
+    </span>
   );
 }
