@@ -87,7 +87,7 @@ All API keys are optional. The app runs fully without any external providers.
 # Run all tests — scoring engine, classification, gates, checklist,
 # thesis repo safety, column allowlist, config, auth, system health,
 # provider health, dead letter queue, user_id scoping, integration startup,
-# signal normalizer, signal ingestion, scheduler, GDELT, signal quality (vitest, 340 tests)
+# signal normalizer, signal ingestion, scheduler, GDELT, signal quality, ACLED, session 4 integration (vitest, 367 tests)
 npm test
 
 # Watch mode
@@ -127,5 +127,5 @@ npm run test:watch
 - All config centralized in `server/config.js` — no `process.env` outside that file
 - Provider health tracked in `provider_health` table, auto-updated on every provider call
 - Failed async jobs logged to `dead_letter_queue` with exponential backoff retry
-- 340 automated tests covering scoring, classification, gates, checklist, thesis repo safety, config, auth, system health, provider health, dead letter queue, user_id scoping, integration startup, signal normalizer, signal ingestion, scheduler, GDELT ingestion, signal quality
+- 367 automated tests covering scoring, classification, gates, checklist, thesis repo safety, config, auth, system health, provider health, dead letter queue, user_id scoping, integration startup, signal normalizer, signal ingestion, scheduler, GDELT ingestion, signal quality, ACLED provider, Polymarket scoring wire, session 4 integration
 - Root-level ErrorBoundary catches crashes in any route

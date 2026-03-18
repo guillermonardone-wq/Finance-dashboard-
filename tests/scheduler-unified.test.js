@@ -151,16 +151,30 @@ describe("scheduler unified", () => {
 // ---- Legacy files still exist but are NOT imported by scheduler ----
 
 describe("legacy isolation", () => {
-  it("fred-signals.js exists but is not imported by scheduler", async () => {
+  it("legacy signal files are moved to legacy/ and not imported by scheduler", async () => {
     const fs = await import("fs");
 
-    // fred-signals.js still exists (used by ingestion pipeline internally)
-    const exists = fs.existsSync(
+    // Legacy files moved to legacy/ folder
+    const legacyFred = fs.existsSync(
+      new URL("../server/services/legacy/fred-signals.js", import.meta.url),
+    );
+    const legacyGdelt = fs.existsSync(
+      new URL("../server/services/legacy/gdelt-signals.js", import.meta.url),
+    );
+    expect(legacyFred).toBe(true);
+    expect(legacyGdelt).toBe(true);
+
+    // Not in the active services/ path
+    const activeFred = fs.existsSync(
       new URL("../server/services/fred-signals.js", import.meta.url),
     );
-    expect(exists).toBe(true);
+    const activeGdelt = fs.existsSync(
+      new URL("../server/services/gdelt-signals.js", import.meta.url),
+    );
+    expect(activeFred).toBe(false);
+    expect(activeGdelt).toBe(false);
 
-    // But scheduler does not import it
+    // Scheduler does not import them
     const schedulerSource = fs.readFileSync(
       new URL("../server/services/scheduler.js", import.meta.url),
       "utf-8",

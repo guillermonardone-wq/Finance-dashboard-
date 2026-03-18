@@ -1,6 +1,9 @@
 // ============================================================
 // INGESTION STATUS — In-memory tracker for pipeline health
 // ============================================================
+// Tracks overall pipeline status plus per-source status for
+// GDELT, ACLED, and Polymarket wire availability.
+// ============================================================
 
 const state = {
   lastRun: null,
@@ -9,6 +12,13 @@ const state = {
   signalsIngestedCount: 0,
   totalRuns: 0,
   totalErrors: 0,
+};
+
+// Per-source status tracking
+const sourceStatus = {
+  gdelt: { status: "unknown", lastRun: null, lastCount: 0, baselineWarmed: false },
+  acled: { status: "unknown", lastRun: null, lastCount: 0 },
+  polymarket: { status: "unknown", available: false, eventCount: 0 },
 };
 
 export const ingestionStatus = {
@@ -31,7 +41,20 @@ export const ingestionStatus = {
     state.totalErrors++;
   },
 
+  /**
+   * Update status for a specific source (gdelt, acled, polymarket).
+   */
+  markSourceStatus(source, update) {
+    if (sourceStatus[source]) {
+      Object.assign(sourceStatus[source], update, { lastRun: new Date().toISOString() });
+    }
+  },
+
   getStatus() {
-    return { ...state };
+    return { ...state, sources: { ...sourceStatus } };
+  },
+
+  getSourceStatus(source) {
+    return sourceStatus[source] || null;
   },
 };

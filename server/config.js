@@ -57,6 +57,8 @@ const config = {
       "https://api.unusualwhales.com",
     ),
     polygon: envStr("POLYGON_API_KEY"),
+    acledApiKey: envStr("ACLED_API_KEY"),
+    acledEmail: envStr("ACLED_EMAIL"),
   },
 
   // LLM Advisory

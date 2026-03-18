@@ -196,9 +196,9 @@ describe("runIngestionPipeline", () => {
     const result = await runIngestionPipeline();
     globalThis.fetch = originalFetch;
 
-    expect(result.sources).toHaveLength(5);
+    expect(result.sources).toHaveLength(6);
     expect(result.sources.map((s) => s.source)).toEqual(
-      expect.arrayContaining(["fred", "worldbank", "market", "news", "gdelt"]),
+      expect.arrayContaining(["fred", "worldbank", "market", "news", "gdelt", "acled"]),
     );
     expect(typeof result.totalIngested).toBe("number");
     expect(typeof result.totalSkipped).toBe("number");

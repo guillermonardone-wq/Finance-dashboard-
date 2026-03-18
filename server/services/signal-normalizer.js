@@ -240,6 +240,67 @@ export function normalizeGdeltSignal({ keyword, category, count, average, ratio,
   };
 }
 
+/**
+ * Normalize an ACLED conflict intensity aggregate into a signal.
+ *
+ * @param {object} params
+ * @param {string} params.country
+ * @param {string|null} params.region
+ * @param {number} params.totalEvents
+ * @param {number} params.totalFatalities
+ * @param {string[]} params.eventTypes
+ * @param {string[]} params.topActors
+ * @param {string} params.latestDate
+ * @returns {object} normalized signal
+ */
+export function normalizeAcledSignal({ country, region, totalEvents, totalFatalities, eventTypes, topActors, latestDate }) {
+  if (!country || totalEvents == null) return null;
+
+  const entity = `acled_${country.replace(/\s+/g, "_").toLowerCase()}`;
+
+  // Significance based on event count + fatalities
+  let significance;
+  if (totalFatalities >= 100 || totalEvents >= 50) significance = 5;
+  else if (totalFatalities >= 50 || totalEvents >= 30) significance = 4;
+  else if (totalFatalities >= 20 || totalEvents >= 15) significance = 3;
+  else if (totalFatalities >= 10 || totalEvents >= 5) significance = 2;
+  else significance = 1;
+
+  const direction = "bearish"; // conflict intensity is inherently bearish
+
+  const actorStr = topActors && topActors.length > 0
+    ? ` Key actors: ${topActors.slice(0, 2).join(", ")}.`
+    : "";
+  const typeStr = eventTypes && eventTypes.length > 0
+    ? ` Types: ${eventTypes.join(", ")}.`
+    : "";
+
+  const summary = `${totalEvents} conflict events in ${country} (${region || "unknown region"}) with ${totalFatalities} fatalities in the past week.${typeStr}${actorStr}`;
+
+  return {
+    source: "acled",
+    category: "geopolitical_escalation",
+    entity,
+    value: totalEvents,
+    previous_value: null, // no baseline yet
+    change: null,
+    timestamp: latestDate || new Date().toISOString(),
+    significance,
+    direction,
+    summary,
+    title: `ACLED: ${country} — ${totalEvents} events, ${totalFatalities} fatalities`,
+    subcategory: "conflict_intensity",
+    source_type: "acled",
+    source_provider: "acled",
+    source_attribution: `ACLED — Armed Conflict Location & Event Data (${country})`,
+    raw_source: `acled-${country.replace(/\s+/g, "_").toLowerCase()}-${(latestDate || new Date().toISOString()).slice(0, 10)}`,
+    novelty: "new",
+    reliability: "verified",
+    signal_strength: Math.min(1, (totalEvents / 50 + totalFatalities / 100) / 2),
+    tags: ["auto", "acled", country.toLowerCase().replace(/\s+/g, "_")],
+  };
+}
+
 // ---- Helpers ----
 
 const CATEGORY_KEYWORDS = {

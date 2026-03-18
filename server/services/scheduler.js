@@ -5,7 +5,7 @@
 // All legacy per-provider functions have been removed.
 // ============================================================
 
-import { runIngestionPipeline } from "./signal-ingestion.js";
+import { runIngestionPipeline, warmGdeltBaseline } from "./signal-ingestion.js";
 import { ingestionStatus } from "./ingestion-status.js";
 import config from "../config.js";
 import { logFailure } from "./dead-letter.js";
@@ -30,7 +30,12 @@ async function runScheduledIngestion() {
 }
 
 export async function startScheduler() {
-  // Initial run after 3s delay (let DB settle)
+  // Warm GDELT baseline from DB before first ingestion
+  warmGdeltBaseline().catch((err) => {
+    console.warn(`[Scheduler] GDELT baseline warmup failed (non-fatal): ${err.message}`);
+  });
+
+  // Initial run after 3s delay (let DB settle + baseline warm)
   setTimeout(() => {
     runScheduledIngestion().catch((err) => {
       console.error(`[Scheduler] Initial ingestion failed: ${err.message}`);

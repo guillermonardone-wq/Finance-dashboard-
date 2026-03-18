@@ -21,8 +21,10 @@ import {
   normalizeMarketSignal,
   normalizeNewsSignal,
   normalizeGdeltSignal,
+  normalizeAcledSignal,
 } from "./signal-normalizer.js";
 import { qualityFilter, scoreSignal } from "./signal-quality.js";
+import { fetchAcledEvents, aggregateByCountry, detectIntensitySpikes } from "../providers/acled.js";
 import config from "../config.js";
 
 // Dedup window: skip signals for same entity+category+direction within this many minutes
@@ -491,6 +493,112 @@ export async function ingestGdeltSignals(userId = "default") {
   return results;
 }
 
+// ---- ACLED INGESTION ----
+
+/**
+ * Ingest conflict signals from ACLED.
+ * Fetches weekly events, aggregates by country, detects intensity spikes.
+ */
+export async function ingestAcledSignals(userId = "default") {
+  const knex = getKnex();
+  const results = { source: "acled", ingested: 0, skipped: 0, filtered: 0, errors: [] };
+
+  try {
+    const fetched = await fetchAcledEvents({ days: 7, limit: 200 });
+    if (!fetched.success) {
+      if (fetched.error && fetched.error.includes("not configured")) {
+        // Silent skip — ACLED not configured
+        return results;
+      }
+      results.errors.push({ error: fetched.error });
+      return results;
+    }
+
+    if (fetched.data.length === 0) return results;
+
+    const countryAggs = aggregateByCountry(fetched.data);
+    const spikes = detectIntensitySpikes(countryAggs);
+
+    for (const agg of spikes) {
+      const normalized = normalizeAcledSignal(agg);
+      if (!normalized) continue;
+
+      const outcome = await processSignal(knex, normalized, userId);
+      if (outcome === "ingested") {
+        results.ingested++;
+        console.log(`[Signal Ingestion] ACLED: ${normalized.title}`);
+      } else if (outcome === "duplicate") {
+        results.skipped++;
+      } else {
+        results.filtered++;
+      }
+    }
+  } catch (err) {
+    console.warn(`[Signal Ingestion] ACLED failed: ${err.message}`);
+    results.errors.push({ error: err.message });
+  }
+
+  return results;
+}
+
+// ---- GDELT COLD-START BASELINE ----
+
+/**
+ * Warm GDELT rolling averages from recent DB history on startup.
+ * Prevents false spike claims on first run after restart.
+ *
+ * Queries recent GDELT signals from the DB and reconstructs
+ * approximate rolling averages from their stored values.
+ */
+export async function warmGdeltBaseline() {
+  try {
+    const knex = getKnex();
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const recentGdelt = await knex("signals")
+      .where("source_provider", "gdelt")
+      .where("created_at", ">", sevenDaysAgo)
+      .select("entity", "value", "created_at")
+      .orderBy("created_at", "asc");
+
+    if (recentGdelt.length === 0) {
+      console.log("[GDELT Baseline] No recent GDELT signals in DB — baseline warming skipped. First runs may produce false spikes.");
+      return { warmed: false, reason: "no_history", keywords: 0 };
+    }
+
+    let keywordsWarmed = 0;
+
+    for (const row of recentGdelt) {
+      // Entity format: gdelt_keyword_here → extract keyword
+      const keyword = (row.entity || "")
+        .replace(/^gdelt_/, "")
+        .replace(/_/g, " ");
+
+      if (!keyword) continue;
+
+      const count = row.value != null ? Number(row.value) : 0;
+      if (!isFinite(count) || count === 0) continue;
+
+      // Inject into rolling average as historical data point
+      if (!gdeltVolumeHistory.has(keyword)) {
+        gdeltVolumeHistory.set(keyword, []);
+      }
+
+      gdeltVolumeHistory.get(keyword).push({
+        count,
+        timestamp: new Date(row.created_at).getTime(),
+      });
+      keywordsWarmed++;
+    }
+
+    console.log(`[GDELT Baseline] Warmed ${keywordsWarmed} data points from DB history.`);
+    return { warmed: true, reason: "db_history", keywords: keywordsWarmed };
+  } catch (err) {
+    console.warn(`[GDELT Baseline] Warmup failed (non-fatal): ${err.message}`);
+    return { warmed: false, reason: "error", error: err.message };
+  }
+}
+
 // ---- FULL PIPELINE ----
 
 /**
@@ -508,25 +616,28 @@ export async function runIngestionPipeline(userId = "default") {
         { source: "market", ingested: 0, skipped: 0, errors: [] },
         { source: "news", ingested: 0, skipped: 0, errors: [] },
         { source: "gdelt", ingested: 0, skipped: 0, errors: [] },
+        { source: "acled", ingested: 0, skipped: 0, errors: [] },
       ],
       totalIngested: 0,
       totalSkipped: 0,
+      totalFiltered: 0,
       totalErrors: 0,
     };
   }
 
   console.log("[Signal Ingestion] Starting full pipeline...");
 
-  const [fred, worldbank, market, news, gdelt] = await Promise.allSettled([
+  const [fred, worldbank, market, news, gdelt, acled] = await Promise.allSettled([
     ingestFredSignals(userId),
     ingestWorldBankSignals(userId),
     ingestMarketSignals(userId),
     ingestNewsSignals(userId),
     ingestGdeltSignals(userId),
+    ingestAcledSignals(userId),
   ]);
 
-  const settled = [fred, worldbank, market, news, gdelt];
-  const sourceNames = ["fred", "worldbank", "market", "news", "gdelt"];
+  const settled = [fred, worldbank, market, news, gdelt, acled];
+  const sourceNames = ["fred", "worldbank", "market", "news", "gdelt", "acled"];
   const sources = settled.map((r, i) =>
     r.status === "fulfilled"
       ? r.value
