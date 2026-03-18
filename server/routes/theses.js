@@ -2,6 +2,7 @@ import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { getKnex } from "../db/connection.js";
 import * as thesisRepo from "../db/thesis-repo.js";
+import { logDecision } from "../db/decision-log-repo.js";
 
 const router = Router();
 
@@ -150,8 +151,38 @@ router.post("/", async (req, res) => {
 // PUT update thesis
 router.put("/:id", async (req, res) => {
   try {
+    // Fetch previous state for change detection
+    const previous = await thesisRepo.findById(req.params.id);
+    if (!previous) return res.status(404).json({ error: "Thesis not found" });
+
     const updated = await thesisRepo.update(req.params.id, req.body);
     if (!updated) return res.status(404).json({ error: "Thesis not found" });
+
+    // Log classification and status changes to decision_log (non-blocking)
+    const userId = req.body.user_id || "default";
+    try {
+      if (req.body.classification && req.body.classification !== previous.classification) {
+        await logDecision({
+          thesisId: req.params.id,
+          action: "classification_change",
+          fromValue: previous.classification,
+          toValue: req.body.classification,
+          reason: req.body.classification_reason || "No reason provided",
+        }, userId);
+      }
+      if (req.body.status && req.body.status !== previous.status) {
+        await logDecision({
+          thesisId: req.params.id,
+          action: "status_change",
+          fromValue: previous.status,
+          toValue: req.body.status,
+          reason: req.body.status_reason || "No reason provided",
+        }, userId);
+      }
+    } catch (logErr) {
+      console.warn(`[Theses] Decision logging failed (non-fatal): ${logErr.message}`);
+    }
+
     res.json(updated);
   } catch (err) {
     console.error(
