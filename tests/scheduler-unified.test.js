@@ -284,7 +284,7 @@ describe("INGESTION_MODE=mock", () => {
     );
     expect(source).toContain('config.ingestionMode === "mock"');
     expect(source).toContain("Mock mode");
-    // The early return should produce 4 sources with 0 counts
+    // The early return should produce 5 sources with 0 counts
     expect(source).toContain("totalIngested: 0");
   });
 });

@@ -1,5 +1,10 @@
 // ============================================================
-// GDELT SIGNAL GENERATOR — Creates signals from GDELT article volume spikes
+// LEGACY — GDELT SIGNAL GENERATOR (reference only)
+// ============================================================
+// This file is NO LONGER on the active ingestion path.
+// GDELT ingestion is now handled by signal-ingestion.js via
+// ingestGdeltSignals() and normalizeGdeltSignal().
+// Retained as reference for the spike detection algorithm.
 // ============================================================
 
 import { v4 as uuidv4 } from "uuid";

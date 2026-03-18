@@ -173,6 +173,73 @@ export function normalizeNewsSignal({ title, description, url, source, published
   };
 }
 
+/**
+ * Normalize a GDELT volume spike into a signal.
+ *
+ * @param {object} params
+ * @param {string} params.keyword     - monitored query, e.g. "military escalation"
+ * @param {string} params.category    - mapped category, e.g. "military_mobilization"
+ * @param {number} params.count       - article count in last 24h
+ * @param {number} params.average     - 7-day rolling average
+ * @param {number} params.ratio       - count / average
+ * @param {Array}  params.topArticles - top 3 articles [{title, url, source}]
+ * @returns {object|null} normalized signal, or null if data is invalid
+ */
+export function normalizeGdeltSignal({ keyword, category, count, average, ratio, topArticles }) {
+  if (count == null || !isFinite(count) || count === 0) return null;
+  if (!keyword) return null;
+
+  const safeAvg = average != null && isFinite(average) ? average : 0;
+  const safeRatio = ratio != null && isFinite(ratio) ? ratio : (safeAvg > 0 ? count / safeAvg : 1);
+  const articles = Array.isArray(topArticles) ? topArticles : [];
+
+  const entity = `gdelt_${keyword.replace(/\s+/g, "_")}`;
+
+  // Significance: based on spike ratio
+  const significance = safeRatio >= 5 ? 5
+    : safeRatio >= 3.5 ? 4
+    : safeRatio >= 2.5 ? 3
+    : safeRatio >= 2 ? 2
+    : 1;
+
+  // GDELT spikes are inherently bearish/escalatory for the monitored themes
+  const direction = "bearish";
+
+  const articleLines = articles
+    .filter((a) => a && a.title)
+    .slice(0, 3)
+    .map((a, i) => `${i + 1}. ${a.title}${a.source ? ` (${a.source})` : ""}`);
+
+  const summary = [
+    `Article volume for "${keyword}" spiked to ${count} articles in 24h (${safeRatio.toFixed(1)}x the 7-day avg of ${safeAvg.toFixed(0)}).`,
+    ...articleLines,
+  ].join("\n");
+
+  return {
+    source: "gdelt",
+    category,
+    entity,
+    value: count,
+    previous_value: safeAvg,
+    change: count - safeAvg,
+    timestamp: new Date().toISOString(),
+    significance,
+    direction,
+    summary,
+    title: `GDELT spike: "${keyword}" \u2014 ${count} articles (${safeRatio.toFixed(1)}x avg)`,
+    subcategory: keyword,
+    source_type: "gdelt",
+    source_provider: "gdelt",
+    source_attribution: "GDELT Project \u2014 DOC 2.0 API",
+    source_url: articles[0]?.url || null,
+    raw_source: `gdelt-${keyword.replace(/\s+/g, "_")}-${new Date().toISOString().slice(0, 13)}`,
+    novelty: "new",
+    reliability: "likely",
+    signal_strength: Math.min(1, safeRatio / 5),
+    tags: ["auto", "gdelt", keyword.replace(/\s+/g, "_")],
+  };
+}
+
 // ---- Helpers ----
 
 const CATEGORY_KEYWORDS = {

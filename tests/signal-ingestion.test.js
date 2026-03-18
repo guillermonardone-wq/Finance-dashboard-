@@ -185,12 +185,20 @@ describe("runIngestionPipeline", () => {
     mockRegistry.getPrice.mockResolvedValue({ success: false });
     mockRegistry.getNews.mockResolvedValue({ success: false });
 
+    // Mock fetch for GDELT
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ articles: [] }),
+    });
+
     const { runIngestionPipeline } = await import("../server/services/signal-ingestion.js");
     const result = await runIngestionPipeline();
+    globalThis.fetch = originalFetch;
 
-    expect(result.sources).toHaveLength(4);
+    expect(result.sources).toHaveLength(5);
     expect(result.sources.map((s) => s.source)).toEqual(
-      expect.arrayContaining(["fred", "worldbank", "market", "news"]),
+      expect.arrayContaining(["fred", "worldbank", "market", "news", "gdelt"]),
     );
     expect(typeof result.totalIngested).toBe("number");
     expect(typeof result.totalSkipped).toBe("number");

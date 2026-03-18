@@ -18,6 +18,7 @@ import {
   normalizeWorldBankSignal,
   normalizeMarketSignal,
   normalizeNewsSignal,
+  normalizeGdeltSignal,
 } from "./signal-normalizer.js";
 import config from "../config.js";
 
@@ -335,6 +336,133 @@ export async function ingestNewsSignals(userId = "default") {
   return results;
 }
 
+// ---- GDELT INGESTION ----
+
+const GDELT_DOC_API = "https://api.gdeltproject.org/api/v2/doc/doc";
+
+const GDELT_KEYWORDS = [
+  { query: "military escalation", category: "military_mobilization" },
+  { query: "sanctions", category: "sanctions_risk" },
+  { query: "central bank emergency", category: "central_bank_action" },
+  { query: "oil supply disruption", category: "energy_bottleneck" },
+  { query: "currency crisis", category: "currency_instability" },
+  { query: "strait of hormuz", category: "shipping_disruption" },
+  { query: "taiwan strait", category: "geopolitical_escalation" },
+];
+
+// In-memory rolling averages for spike detection (persists across runs)
+const gdeltVolumeHistory = new Map();
+
+/**
+ * Fetch article count and top articles from GDELT DOC API.
+ * Exported for testability.
+ */
+export async function fetchGdeltArticleCount(query) {
+  const params = new URLSearchParams({
+    query,
+    mode: "ArtList",
+    maxrecords: "75",
+    timespan: "24h",
+    format: "json",
+    sort: "DateDesc",
+  });
+
+  const url = `${GDELT_DOC_API}?${params}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`GDELT API error: ${res.status} ${res.statusText}`);
+  }
+
+  const data = await res.json();
+  const articles = data.articles || [];
+
+  return {
+    count: articles.length,
+    articles: articles.slice(0, 3).map((a) => ({
+      title: a.title || "",
+      url: a.url || "",
+      source: a.domain || a.source || "",
+    })),
+  };
+}
+
+/**
+ * Update in-memory rolling average for a keyword.
+ * Returns { average, isSpike }.
+ */
+export function updateGdeltRollingAverage(keyword, currentCount) {
+  if (!gdeltVolumeHistory.has(keyword)) {
+    gdeltVolumeHistory.set(keyword, []);
+  }
+
+  const history = gdeltVolumeHistory.get(keyword);
+  history.push({ count: currentCount, timestamp: Date.now() });
+
+  // Keep only last 7 days
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recent = history.filter((h) => h.timestamp > sevenDaysAgo);
+  gdeltVolumeHistory.set(keyword, recent);
+
+  if (recent.length < 2) {
+    return { average: currentCount, isSpike: false };
+  }
+
+  const previousEntries = recent.slice(0, -1);
+  const average = previousEntries.reduce((s, h) => s + h.count, 0) / previousEntries.length;
+  const spikeMultiplier = config.signals.gdeltSpikeMultiplier;
+
+  return {
+    average,
+    isSpike: average > 0 && currentCount >= average * spikeMultiplier,
+  };
+}
+
+/**
+ * Ingest signals from GDELT volume spike detection.
+ * Fetches article counts, detects spikes vs rolling average,
+ * normalizes into standard signal format, deduplicates, stores.
+ */
+export async function ingestGdeltSignals(userId = "default") {
+  const knex = getKnex();
+  const results = { source: "gdelt", ingested: 0, skipped: 0, errors: [] };
+
+  for (const kw of GDELT_KEYWORDS) {
+    try {
+      const fetched = await fetchGdeltArticleCount(kw.query);
+      const { average, isSpike } = updateGdeltRollingAverage(kw.query, fetched.count);
+
+      if (!isSpike) continue;
+
+      const ratio = average > 0 ? fetched.count / average : 1;
+
+      const normalized = normalizeGdeltSignal({
+        keyword: kw.query,
+        category: kw.category,
+        count: fetched.count,
+        average,
+        ratio,
+        topArticles: fetched.articles,
+      });
+
+      if (!normalized) continue;
+
+      if (await isDuplicate(knex, normalized, userId)) {
+        results.skipped++;
+        continue;
+      }
+
+      await storeSignal(knex, normalized, userId);
+      results.ingested++;
+      console.log(`[Signal Ingestion] GDELT: ${normalized.title}`);
+    } catch (err) {
+      console.warn(`[Signal Ingestion] GDELT failed for "${kw.query}": ${err.message}`);
+      results.errors.push({ keyword: kw.query, error: err.message });
+    }
+  }
+
+  return results;
+}
+
 // ---- FULL PIPELINE ----
 
 /**
@@ -351,6 +479,7 @@ export async function runIngestionPipeline(userId = "default") {
         { source: "worldbank", ingested: 0, skipped: 0, errors: [] },
         { source: "market", ingested: 0, skipped: 0, errors: [] },
         { source: "news", ingested: 0, skipped: 0, errors: [] },
+        { source: "gdelt", ingested: 0, skipped: 0, errors: [] },
       ],
       totalIngested: 0,
       totalSkipped: 0,
@@ -360,19 +489,21 @@ export async function runIngestionPipeline(userId = "default") {
 
   console.log("[Signal Ingestion] Starting full pipeline...");
 
-  const [fred, worldbank, market, news] = await Promise.allSettled([
+  const [fred, worldbank, market, news, gdelt] = await Promise.allSettled([
     ingestFredSignals(userId),
     ingestWorldBankSignals(userId),
     ingestMarketSignals(userId),
     ingestNewsSignals(userId),
+    ingestGdeltSignals(userId),
   ]);
 
-  const sources = [
-    fred.status === "fulfilled" ? fred.value : { source: "fred", ingested: 0, skipped: 0, errors: [{ error: fred.reason?.message }] },
-    worldbank.status === "fulfilled" ? worldbank.value : { source: "worldbank", ingested: 0, skipped: 0, errors: [{ error: worldbank.reason?.message }] },
-    market.status === "fulfilled" ? market.value : { source: "market", ingested: 0, skipped: 0, errors: [{ error: market.reason?.message }] },
-    news.status === "fulfilled" ? news.value : { source: "news", ingested: 0, skipped: 0, errors: [{ error: news.reason?.message }] },
-  ];
+  const settled = [fred, worldbank, market, news, gdelt];
+  const sourceNames = ["fred", "worldbank", "market", "news", "gdelt"];
+  const sources = settled.map((r, i) =>
+    r.status === "fulfilled"
+      ? r.value
+      : { source: sourceNames[i], ingested: 0, skipped: 0, errors: [{ error: r.reason?.message }] },
+  );
 
   const totalIngested = sources.reduce((s, r) => s + r.ingested, 0);
   const totalSkipped = sources.reduce((s, r) => s + r.skipped, 0);
