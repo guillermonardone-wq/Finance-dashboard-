@@ -29,6 +29,8 @@ export const api = {
   getSignals: (params) =>
     request(`/signals?${new URLSearchParams(params || {})}`),
   getSignalCounts: () => request("/signals/counts"),
+  checkSignalDuplicate: (params) =>
+    request(`/signals/check-duplicate?${new URLSearchParams(params || {})}`),
   getSignal: (id) => request(`/signals/${id}`),
   createSignal: (data) =>
     request("/signals", { method: "POST", body: JSON.stringify(data) }),

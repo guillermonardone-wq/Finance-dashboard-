@@ -12,6 +12,18 @@ router.get("/", async (req, res) => {
   res.json(rows);
 });
 
+// GET check for duplicate signal
+router.get("/check-duplicate", async (req, res) => {
+  const { title, entity, category } = req.query;
+  const userId = req.userId || "default";
+  try {
+    const match = await signalRepo.checkDuplicate({ title, entity, category }, userId);
+    res.json({ duplicate: !!match, match: match || null });
+  } catch (err) {
+    res.json({ duplicate: false, match: null });
+  }
+});
+
 // GET signal counts by status
 router.get("/counts", async (req, res) => {
   const userId = req.userId || "default";

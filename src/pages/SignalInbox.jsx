@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSignalStore } from '../store/useSignalStore';
 import { useThesisStore } from '../store/useThesisStore';
+import { api } from '../lib/api';
 
 const CATEGORIES = [
   'geopolitical_escalation', 'military_mobilization', 'commodity_chokepoint',
@@ -52,6 +53,12 @@ export default function SignalInbox() {
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [expandedSignal, setExpandedSignal] = useState(null);
+  const [dupWarning, setDupWarning] = useState(null); // { match, pendingText }
+  const [showQuickThesis, setShowQuickThesis] = useState(false);
+  const [qtTitle, setQtTitle] = useState('');
+  const [qtStatement, setQtStatement] = useState('');
+  const [qtError, setQtError] = useState(null);
+  const [qtSaving, setQtSaving] = useState(false);
   const quickInputRef = useRef(null);
 
   // "New since last visit" tracking
@@ -80,32 +87,106 @@ export default function SignalInbox() {
     fetchTheses();
   }, [fetchTheses]);
 
-  // Quick Add — parse text, create signal immediately
+  // Quick Add — with dedup check before insert
+  const doCreateSignal = async (text) => {
+    const isUrl = /^https?:\/\//.test(text);
+    await createSignal({
+      title: isUrl ? text.slice(0, 200) : text.slice(0, 200),
+      description: text,
+      category: 'other',
+      source_type: 'manual',
+      source_url: isUrl ? text : '',
+      source_attribution: 'Quick add',
+      novelty: 'new',
+      reliability: 'unverified',
+    });
+    setQuickText('');
+    fetchCounts();
+    quickInputRef.current?.focus();
+  };
+
   const handleQuickAdd = async (e) => {
     e.preventDefault();
     const text = quickText.trim();
     if (!text) return;
     setQuickError(null);
 
-    const isUrl = /^https?:\/\//.test(text);
-
     try {
-      await createSignal({
-        title: isUrl ? text.slice(0, 200) : text.slice(0, 200),
-        description: text,
-        category: 'other',
-        source_type: 'manual',
-        source_url: isUrl ? text : '',
-        source_attribution: 'Quick add',
-        novelty: 'new',
-        reliability: 'unverified',
-      });
-      setQuickText('');
-      fetchCounts();
-      quickInputRef.current?.focus();
+      // Dedup check
+      const dupCheck = await api.checkSignalDuplicate({ title: text });
+      if (dupCheck.duplicate && dupCheck.match) {
+        setDupWarning({ match: dupCheck.match, pendingText: text });
+        return;
+      }
+      await doCreateSignal(text);
     } catch (err) {
       setQuickError(err.message);
     }
+  };
+
+  // Dedup resolution handlers
+  const handleDupKeepSeparate = async () => {
+    if (!dupWarning) return;
+    try { await doCreateSignal(dupWarning.pendingText); } catch (err) { setQuickError(err.message); }
+    setDupWarning(null);
+  };
+  const handleDupMerge = async () => {
+    if (!dupWarning?.match) return;
+    try {
+      const existing = dupWarning.match;
+      const related = Array.isArray(existing.related_signal_ids) ? existing.related_signal_ids : [];
+      await updateSignal(existing.id, {
+        description: `${existing.description}\n---\nMerged: ${dupWarning.pendingText}`,
+        related_signal_ids: related,
+      });
+      setQuickText('');
+    } catch (err) { setQuickError(err.message); }
+    setDupWarning(null);
+  };
+
+  // Quick Thesis — create draft thesis, optionally link selected signals
+  const handleQuickThesis = async (e) => {
+    e.preventDefault();
+    if (!qtTitle.trim() || !qtStatement.trim()) return;
+    setQtError(null);
+    setQtSaving(true);
+    try {
+      const created = await api.createThesis({
+        title: qtTitle.trim(),
+        thesis_statement: qtStatement.trim(),
+        status: 'draft',
+        classification: 'WATCH',
+        probability_low: 0.2,
+        probability_high: 0.6,
+        probability_best: 0.4,
+        causal_chain: [],
+        affected_assets: [],
+        expected_timeline: {},
+        market_pricing_assessment: {},
+        key_assumptions: [],
+        alternative_explanations: [],
+        disconfirming_evidence: [],
+        strongest_bear_case: '',
+        what_would_make_opposite_stronger: '',
+        tags: [],
+      });
+      // Auto-link selected signals if in bulk mode
+      if (created && selectedIds.size > 0) {
+        for (const sigId of selectedIds) {
+          await updateSignal(sigId, { thesis_id: created.id, status: 'linked' });
+        }
+        setSelectedIds(new Set());
+        setBulkMode(false);
+      }
+      setQtTitle('');
+      setQtStatement('');
+      setShowQuickThesis(false);
+      fetchCounts();
+      fetchTheses();
+    } catch (err) {
+      setQtError(err.message);
+    }
+    setQtSaving(false);
   };
 
   const handleSubmit = async (e) => {
@@ -223,7 +304,7 @@ export default function SignalInbox() {
           <button
             type="submit"
             disabled={!quickText.trim()}
-            className="px-5 py-3 bg-cyan-500 text-slate-950 font-bold rounded-lg text-sm hover:bg-cyan-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+            className="px-5 py-3 min-h-[44px] bg-cyan-500 text-slate-950 font-bold rounded-lg text-sm hover:bg-cyan-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
           >
             + Add
           </button>
@@ -233,8 +314,68 @@ export default function SignalInbox() {
         )}
       </form>
 
+      {/* Dedup warning modal */}
+      {dupWarning && (
+        <div className="mb-4 p-4 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+          <p className="text-sm text-amber-400 font-medium mb-2">Potential duplicate detected</p>
+          <p className="text-xs text-slate-400 mb-1">Your signal looks similar to:</p>
+          <div className="bg-slate-800 rounded p-2 mb-3">
+            <p className="text-sm text-slate-300">{dupWarning.match.title}</p>
+            <p className="text-xs text-slate-500 mt-1">{timeAgo(dupWarning.match.created_at)} · {dupWarning.match.source_type} · {dupWarning.match.category?.replace(/_/g, ' ')}</p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={handleDupMerge} className="px-3 py-2 min-h-[44px] text-xs rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20 transition-colors">
+              Merge with existing
+            </button>
+            <button onClick={handleDupKeepSeparate} className="px-3 py-2 min-h-[44px] text-xs rounded bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition-colors">
+              Keep separate
+            </button>
+            <button onClick={() => setDupWarning(null)} className="px-3 py-2 min-h-[44px] text-xs rounded text-slate-500 hover:text-slate-300 transition-colors">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Thesis — collapsible */}
+      <div className="mb-4">
+        <button
+          onClick={() => setShowQuickThesis(!showQuickThesis)}
+          className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          {showQuickThesis ? '▲ Hide Quick Thesis' : '▼ Quick Thesis'}
+          {selectedIds.size > 0 && ` (${selectedIds.size} signals will be linked)`}
+        </button>
+        {showQuickThesis && (
+          <form onSubmit={handleQuickThesis} className="mt-2 bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-3">
+            <input
+              value={qtTitle}
+              onChange={e => setQtTitle(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2.5 min-h-[44px] text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50"
+              placeholder="Thesis title..."
+              required
+            />
+            <textarea
+              value={qtStatement}
+              onChange={e => setQtStatement(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2.5 min-h-[44px] text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 h-16"
+              placeholder="One-line thesis statement..."
+              required
+            />
+            {qtError && <p className="text-xs text-red-400">{qtError}</p>}
+            <button
+              type="submit"
+              disabled={qtSaving || !qtTitle.trim() || !qtStatement.trim()}
+              className="px-4 py-2.5 min-h-[44px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded text-sm font-medium hover:bg-emerald-500/20 disabled:opacity-30 transition-colors"
+            >
+              {qtSaving ? 'Saving...' : 'Save Draft Thesis'}
+            </button>
+          </form>
+        )}
+      </div>
+
       {/* Filter + actions bar */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
         <div className="flex gap-1">
           {STATUS_FILTERS.map(f => (
             <button
@@ -289,7 +430,7 @@ export default function SignalInbox() {
           {error && (
             <div className="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded p-2">{error}</div>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Title" required>
               <input
                 value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
@@ -317,7 +458,7 @@ export default function SignalInbox() {
             />
           </Field>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Field label="Source Type">
               <select
                 value={form.source_type} onChange={e => setForm(f => ({ ...f, source_type: e.target.value }))}
@@ -344,7 +485,7 @@ export default function SignalInbox() {
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Source URL">
               <input
                 value={form.source_url} onChange={e => setForm(f => ({ ...f, source_url: e.target.value }))}
@@ -375,7 +516,7 @@ export default function SignalInbox() {
 
           <button
             type="submit"
-            className="px-6 py-2 bg-cyan-500 text-slate-950 font-bold rounded text-sm hover:bg-cyan-400 transition-colors"
+            className="w-full sm:w-auto px-6 py-3 min-h-[44px] bg-cyan-500 text-slate-950 font-bold rounded text-sm hover:bg-cyan-400 transition-colors"
           >
             Capture Signal
           </button>
@@ -447,19 +588,19 @@ export default function SignalInbox() {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-1 ml-3 flex-shrink-0">
+              <div className="flex gap-1 ml-2 flex-shrink-0 flex-wrap justify-end">
                 {(signal.status === 'inbox' || signal.status === 'reviewing') && (
                   <>
                     <button
                       onClick={() => handleStartThesis(signal)}
-                      className="px-2 py-1 rounded text-xs transition-colors text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20"
+                      className="px-2 py-1.5 min-h-[44px] rounded text-xs transition-colors text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20"
                       title="Start a new thesis pre-filled from this signal"
                     >
-                      Start Thesis
+                      Thesis
                     </button>
                     <button
                       onClick={() => setLinkingSignalId(linkingSignalId === signal.id ? null : signal.id)}
-                      className="px-2 py-1 rounded text-xs transition-colors text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20"
+                      className="px-2 py-1.5 min-h-[44px] rounded text-xs transition-colors text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20"
                     >
                       Link
                     </button>
@@ -581,7 +722,7 @@ function StatusBtn({ label, onClick, color = 'slate' }) {
     red: 'text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20',
   };
   return (
-    <button onClick={onClick} className={`px-2 py-1 rounded text-xs transition-colors ${colors[color]}`}>
+    <button onClick={onClick} className={`px-2 py-1.5 min-h-[44px] rounded text-xs transition-colors ${colors[color]}`}>
       {label}
     </button>
   );

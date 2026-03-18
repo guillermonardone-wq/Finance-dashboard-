@@ -115,3 +115,45 @@ export async function remove(id, userId = "default") {
   const knex = getKnex();
   await knex("signals").where({ id, ...userScoped(userId) }).del();
 }
+
+/**
+ * Check for potential duplicate signals.
+ * Matches on: same entity + category within 24h, OR title containment.
+ */
+export async function checkDuplicate({ title, entity, category }, userId = "default") {
+  const knex = getKnex();
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const lowerTitle = (title || "").toLowerCase().trim();
+
+  // Entity + category match within 24h
+  if (entity && category) {
+    const entityMatch = await knex("signals")
+      .where({ entity, category, ...userScoped(userId) })
+      .where("created_at", ">", cutoff)
+      .orderBy("created_at", "desc")
+      .first();
+    if (entityMatch) return entityMatch;
+  }
+
+  // Title containment match within 24h
+  if (lowerTitle.length >= 10) {
+    const titleMatch = await knex("signals")
+      .where(userScoped(userId))
+      .where("created_at", ">", cutoff)
+      .whereRaw("LOWER(title) LIKE ?", [`%${lowerTitle.slice(0, 80)}%`])
+      .orderBy("created_at", "desc")
+      .first();
+    if (titleMatch && titleMatch.title.toLowerCase() !== lowerTitle) return titleMatch;
+
+    // Reverse: existing title contained in new title
+    const reverseMatch = await knex("signals")
+      .where(userScoped(userId))
+      .where("created_at", ">", cutoff)
+      .whereRaw("? LIKE '%' || LOWER(title) || '%'", [lowerTitle])
+      .orderBy("created_at", "desc")
+      .first();
+    if (reverseMatch) return reverseMatch;
+  }
+
+  return null;
+}
