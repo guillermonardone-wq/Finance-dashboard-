@@ -76,6 +76,8 @@ See `.env.example` for the full list. Key variables:
 | `NEWSAPI_API_KEY` | News headlines | (disabled without key) |
 | `ALPHA_VANTAGE_API_KEY` | Price data | (disabled without key) |
 | `ANTHROPIC_API_KEY` | LLM advisory evaluation | (disabled without key) |
+| `INGESTION_MODE` | Signal ingestion: `live` or `mock` | `live` |
+| `REFRESH_INTERVAL_INGESTION` | Ingestion pipeline interval (seconds) | `900` |
 
 All API keys are optional. The app runs fully without any external providers.
 
@@ -85,7 +87,7 @@ All API keys are optional. The app runs fully without any external providers.
 # Run all tests — scoring engine, classification, gates, checklist,
 # thesis repo safety, column allowlist, config, auth, system health,
 # provider health, dead letter queue, user_id scoping, integration startup,
-# signal normalizer, signal ingestion (vitest, 274 tests)
+# signal normalizer, signal ingestion, scheduler unified (vitest, 293 tests)
 npm test
 
 # Watch mode
@@ -125,5 +127,5 @@ npm run test:watch
 - All config centralized in `server/config.js` — no `process.env` outside that file
 - Provider health tracked in `provider_health` table, auto-updated on every provider call
 - Failed async jobs logged to `dead_letter_queue` with exponential backoff retry
-- 274 automated tests covering scoring, classification, gates, checklist, thesis repo safety, config, auth, system health, provider health, dead letter queue, user_id scoping, integration startup, signal normalizer, signal ingestion
+- 293 automated tests covering scoring, classification, gates, checklist, thesis repo safety, config, auth, system health, provider health, dead letter queue, user_id scoping, integration startup, signal normalizer, signal ingestion, scheduler unified
 - Root-level ErrorBoundary catches crashes in any route

@@ -6,6 +6,7 @@ import { Router } from "express";
 import { getKnex } from "../db/connection.js";
 import { getAllProviderHealth } from "../services/provider-health.js";
 import { getAllEntries } from "../services/dead-letter.js";
+import { ingestionStatus } from "../services/ingestion-status.js";
 
 const router = Router();
 
@@ -66,6 +67,11 @@ router.get("/dlq", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// GET /api/system/ingestion-status — signal ingestion pipeline health
+router.get("/ingestion-status", (req, res) => {
+  res.json(ingestionStatus.getStatus());
 });
 
 export default router;

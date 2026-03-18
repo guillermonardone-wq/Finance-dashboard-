@@ -59,14 +59,23 @@ export function normalizeFredSignal({ seriesId, label, category, unit, value, pr
 
 /**
  * Normalize a World Bank macro indicator into a signal.
+ * Guards against missing/invalid data — returns null if unusable.
  */
 export function normalizeWorldBankSignal({ indicatorCode, indicatorName, category, country, value, previousValue, date }) {
-  const change = previousValue != null ? value - previousValue : 0;
+  // Guard: skip rows with missing critical data
+  if (value == null || !isFinite(value)) return null;
+  if (!indicatorCode || !country) return null;
+
+  const safeValue = Number(value);
+  if (isNaN(safeValue)) return null;
+
+  const safePrev = previousValue != null && isFinite(previousValue) ? Number(previousValue) : null;
+  const change = safePrev != null ? safeValue - safePrev : 0;
   const entity = `${indicatorCode}_${country}`;
   const direction = computeDirection(category, indicatorCode, change);
   const significance = computeSignificance(Math.abs(change), null, null);
 
-  const changeStr = previousValue != null
+  const changeStr = safePrev != null
     ? ` (change: ${change >= 0 ? "+" : ""}${change.toFixed(2)})`
     : "";
 
@@ -74,14 +83,14 @@ export function normalizeWorldBankSignal({ indicatorCode, indicatorName, categor
     source: "worldbank",
     category,
     entity,
-    value,
-    previous_value: previousValue,
+    value: safeValue,
+    previous_value: safePrev,
     change,
-    timestamp: date,
+    timestamp: date || new Date().toISOString(),
     significance,
     direction,
-    summary: `${indicatorName} for ${country}: ${value.toFixed(2)}${changeStr}.`,
-    title: `${indicatorName} (${country}): ${value.toFixed(2)}${changeStr}`,
+    summary: `${indicatorName || indicatorCode} for ${country}: ${safeValue.toFixed(2)}${changeStr}.`,
+    title: `${indicatorName || indicatorCode} (${country}): ${safeValue.toFixed(2)}${changeStr}`,
     source_type: "market_data",
     source_provider: "worldbank",
     source_attribution: `World Bank Data360 \u2014 ${indicatorCode}`,

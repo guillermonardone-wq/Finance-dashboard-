@@ -217,6 +217,12 @@ export async function ingestWorldBankSignals(userId = "default") {
           date: latest.date || latest.TIME_PERIOD || new Date().toISOString(),
         });
 
+        // normalizer returns null for invalid/missing data
+        if (!normalized) {
+          console.warn(`[Signal Ingestion] Skipping invalid World Bank row: ${indicator.code} ${country}`);
+          continue;
+        }
+
         if (await isDuplicate(knex, normalized, userId)) {
           results.skipped++;
           continue;
@@ -334,8 +340,24 @@ export async function ingestNewsSignals(userId = "default") {
 /**
  * Run the full signal ingestion pipeline across all sources.
  * Returns summary of ingested, skipped, and errors per source.
+ * Respects INGESTION_MODE: "mock" skips all provider calls.
  */
 export async function runIngestionPipeline(userId = "default") {
+  if (config.ingestionMode === "mock") {
+    console.log("[Signal Ingestion] Mock mode — skipping provider calls.");
+    return {
+      sources: [
+        { source: "fred", ingested: 0, skipped: 0, errors: [] },
+        { source: "worldbank", ingested: 0, skipped: 0, errors: [] },
+        { source: "market", ingested: 0, skipped: 0, errors: [] },
+        { source: "news", ingested: 0, skipped: 0, errors: [] },
+      ],
+      totalIngested: 0,
+      totalSkipped: 0,
+      totalErrors: 0,
+    };
+  }
+
   console.log("[Signal Ingestion] Starting full pipeline...");
 
   const [fred, worldbank, market, news] = await Promise.allSettled([
