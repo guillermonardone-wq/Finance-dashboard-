@@ -1,11 +1,15 @@
 // ============================================================
 // SIGNAL INGESTION PIPELINE
 // ============================================================
-// Orchestrates: provider → normalizer → quality → dedup → DB
+// Orchestrates:
+//   providers → normalize → collect batch → consolidate →
+//   quality filter → score → dedup → DB
 //
 // Responsibilities:
 // - Call providers for raw data
 // - Normalize into standard signal format
+// - Collect all signals into a single batch
+// - Consolidate cross-source signals (same category + direction)
 // - Quality filter (drop weak / zero-change signals)
 // - Score (strength + confidence)
 // - Dedup by entity + category + direction within time window
@@ -23,7 +27,7 @@ import {
   normalizeGdeltSignal,
   normalizeAcledSignal,
 } from "./signal-normalizer.js";
-import { qualityFilter, scoreSignal } from "./signal-quality.js";
+import { qualityFilter, scoreSignal, consolidateSignals } from "./signal-quality.js";
 import { fetchAcledEvents, aggregateByCountry, detectIntensitySpikes } from "../providers/acled.js";
 import config from "../config.js";
 
@@ -144,18 +148,18 @@ function computeStdDev(values) {
 }
 
 /**
- * Ingest signals from FRED provider.
- * Fetches macro series, detects significant changes, normalizes, deduplicates, stores.
+ * Collect normalized signals from FRED (no DB writes).
+ * @returns {{ source: string, signals: object[], errors: object[] }}
  */
-export async function ingestFredSignals(userId = "default") {
+export async function collectFredSignals() {
   const fredProvider = registry.getProvider("fred");
   if (!fredProvider?.enabled) {
-    return { source: "fred", ingested: 0, skipped: 0, errors: [] };
+    return { source: "fred", signals: [], errors: [] };
   }
 
-  const knex = getKnex();
   const thresholdMult = config.signals.fredThresholdMult;
-  const results = { source: "fred", ingested: 0, skipped: 0, errors: [] };
+  const signals = [];
+  const errors = [];
 
   for (const series of FRED_SERIES) {
     try {
@@ -167,7 +171,6 @@ export async function ingestFredSignals(userId = "default") {
       const change = latest.value - previous.value;
       const absChange = Math.abs(change);
 
-      // Compute threshold from historical changes
       const changes = [];
       for (let i = 0; i < observations.length - 1; i++) {
         changes.push(observations[i].value - observations[i + 1].value);
@@ -190,17 +193,32 @@ export async function ingestFredSignals(userId = "default") {
         stdDev,
       });
 
-      const outcome = await processSignal(knex, normalized, userId);
-      if (outcome === "ingested") {
-        results.ingested++;
-        console.log(`[Signal Ingestion] FRED: ${normalized.title}`);
-      } else if (outcome === "duplicate") {
-        results.skipped++;
-      } else {
-        results.filtered = (results.filtered || 0) + 1;
-      }
+      signals.push(normalized);
     } catch (err) {
-      results.errors.push({ series: series.id, error: err.message });
+      errors.push({ series: series.id, error: err.message });
+    }
+  }
+
+  return { source: "fred", signals, errors };
+}
+
+/**
+ * Ingest signals from FRED provider (standalone mode with inline processing).
+ */
+export async function ingestFredSignals(userId = "default") {
+  const { signals, errors } = await collectFredSignals();
+  const knex = getKnex();
+  const results = { source: "fred", ingested: 0, skipped: 0, filtered: 0, errors };
+
+  for (const signal of signals) {
+    const outcome = await processSignal(knex, signal, userId);
+    if (outcome === "ingested") {
+      results.ingested++;
+      console.log(`[Signal Ingestion] FRED: ${signal.title}`);
+    } else if (outcome === "duplicate") {
+      results.skipped++;
+    } else {
+      results.filtered++;
     }
   }
 
@@ -218,16 +236,16 @@ const WORLDBANK_INDICATORS = [
 const WORLDBANK_COUNTRIES = ["USA", "CHN", "JPN", "DEU", "GBR"];
 
 /**
- * Ingest signals from World Bank provider.
+ * Collect normalized signals from World Bank (no DB writes).
  */
-export async function ingestWorldBankSignals(userId = "default") {
+export async function collectWorldBankSignals() {
   const wbProvider = registry.getProvider("worldbank");
   if (!wbProvider?.enabled) {
-    return { source: "worldbank", ingested: 0, skipped: 0, errors: [] };
+    return { source: "worldbank", signals: [], errors: [] };
   }
 
-  const knex = getKnex();
-  const results = { source: "worldbank", ingested: 0, skipped: 0, errors: [] };
+  const signals = [];
+  const errors = [];
 
   for (const indicator of WORLDBANK_INDICATORS) {
     try {
@@ -235,7 +253,6 @@ export async function ingestWorldBankSignals(userId = "default") {
       if (!observations || observations.length < 1) continue;
 
       for (const country of WORLDBANK_COUNTRIES) {
-        // World Bank returns all countries mixed. Filter per country.
         const countryObs = observations.filter((o) => o.country === country || o.ref_area === country);
         if (countryObs.length < 1) continue;
 
@@ -252,20 +269,34 @@ export async function ingestWorldBankSignals(userId = "default") {
           date: latest.date || latest.TIME_PERIOD || new Date().toISOString(),
         });
 
-        // normalizer returns null for invalid/missing data
         if (!normalized) {
           console.warn(`[Signal Ingestion] Skipping invalid World Bank row: ${indicator.code} ${country}`);
           continue;
         }
 
-        const outcome = await processSignal(knex, normalized, userId);
-        if (outcome === "ingested") results.ingested++;
-        else if (outcome === "duplicate") results.skipped++;
-        else results.filtered = (results.filtered || 0) + 1;
+        signals.push(normalized);
       }
     } catch (err) {
-      results.errors.push({ indicator: indicator.code, error: err.message });
+      errors.push({ indicator: indicator.code, error: err.message });
     }
+  }
+
+  return { source: "worldbank", signals, errors };
+}
+
+/**
+ * Ingest signals from World Bank (standalone mode).
+ */
+export async function ingestWorldBankSignals(userId = "default") {
+  const { signals, errors } = await collectWorldBankSignals();
+  const knex = getKnex();
+  const results = { source: "worldbank", ingested: 0, skipped: 0, filtered: 0, errors };
+
+  for (const signal of signals) {
+    const outcome = await processSignal(knex, signal, userId);
+    if (outcome === "ingested") results.ingested++;
+    else if (outcome === "duplicate") results.skipped++;
+    else results.filtered++;
   }
 
   return results;
@@ -284,13 +315,12 @@ const WATCHLIST_SYMBOLS = [
 ];
 
 /**
- * Ingest market price signals for watchlist symbols.
- * Only creates signals for moves above a minimum threshold.
+ * Collect normalized market signals (no DB writes).
  */
-export async function ingestMarketSignals(userId = "default") {
-  const knex = getKnex();
-  const results = { source: "market", ingested: 0, skipped: 0, errors: [] };
-  const MIN_CHANGE_PERCENT = 1.0; // Only signal moves > 1%
+export async function collectMarketSignals() {
+  const signals = [];
+  const errors = [];
+  const MIN_CHANGE_PERCENT = 1.0;
 
   for (const item of WATCHLIST_SYMBOLS) {
     try {
@@ -313,17 +343,32 @@ export async function ingestMarketSignals(userId = "default") {
         timestamp: new Date().toISOString(),
       });
 
-      const outcome = await processSignal(knex, normalized, userId);
-      if (outcome === "ingested") {
-        results.ingested++;
-        console.log(`[Signal Ingestion] Market: ${normalized.title}`);
-      } else if (outcome === "duplicate") {
-        results.skipped++;
-      } else {
-        results.filtered = (results.filtered || 0) + 1;
-      }
+      signals.push(normalized);
     } catch (err) {
-      results.errors.push({ symbol: item.symbol, error: err.message });
+      errors.push({ symbol: item.symbol, error: err.message });
+    }
+  }
+
+  return { source: "market", signals, errors };
+}
+
+/**
+ * Ingest market price signals (standalone mode).
+ */
+export async function ingestMarketSignals(userId = "default") {
+  const { signals, errors } = await collectMarketSignals();
+  const knex = getKnex();
+  const results = { source: "market", ingested: 0, skipped: 0, filtered: 0, errors };
+
+  for (const signal of signals) {
+    const outcome = await processSignal(knex, signal, userId);
+    if (outcome === "ingested") {
+      results.ingested++;
+      console.log(`[Signal Ingestion] Market: ${signal.title}`);
+    } else if (outcome === "duplicate") {
+      results.skipped++;
+    } else {
+      results.filtered++;
     }
   }
 
@@ -333,15 +378,15 @@ export async function ingestMarketSignals(userId = "default") {
 // ---- NEWS INGESTION ----
 
 /**
- * Ingest news articles as signals.
+ * Collect normalized news signals (no DB writes).
  */
-export async function ingestNewsSignals(userId = "default") {
-  const knex = getKnex();
-  const results = { source: "news", ingested: 0, skipped: 0, errors: [] };
+export async function collectNewsSignals() {
+  const signals = [];
+  const errors = [];
 
   try {
     const result = await registry.getNews("geopolitics OR sanctions OR oil OR central bank OR inflation");
-    if (!result.success || !result.data) return results;
+    if (!result.success || !result.data) return { source: "news", signals, errors };
 
     for (const article of result.data.slice(0, 15)) {
       const normalized = normalizeNewsSignal({
@@ -353,13 +398,28 @@ export async function ingestNewsSignals(userId = "default") {
         provider: result.provider,
       });
 
-      const outcome = await processSignal(knex, normalized, userId);
-      if (outcome === "ingested") results.ingested++;
-      else if (outcome === "duplicate") results.skipped++;
-      else results.filtered = (results.filtered || 0) + 1;
+      signals.push(normalized);
     }
   } catch (err) {
-    results.errors.push({ error: err.message });
+    errors.push({ error: err.message });
+  }
+
+  return { source: "news", signals, errors };
+}
+
+/**
+ * Ingest news articles as signals (standalone mode).
+ */
+export async function ingestNewsSignals(userId = "default") {
+  const { signals, errors } = await collectNewsSignals();
+  const knex = getKnex();
+  const results = { source: "news", ingested: 0, skipped: 0, filtered: 0, errors };
+
+  for (const signal of signals) {
+    const outcome = await processSignal(knex, signal, userId);
+    if (outcome === "ingested") results.ingested++;
+    else if (outcome === "duplicate") results.skipped++;
+    else results.filtered++;
   }
 
   return results;
@@ -447,13 +507,11 @@ export function updateGdeltRollingAverage(keyword, currentCount) {
 }
 
 /**
- * Ingest signals from GDELT volume spike detection.
- * Fetches article counts, detects spikes vs rolling average,
- * normalizes into standard signal format, deduplicates, stores.
+ * Collect normalized GDELT signals (no DB writes).
  */
-export async function ingestGdeltSignals(userId = "default") {
-  const knex = getKnex();
-  const results = { source: "gdelt", ingested: 0, skipped: 0, errors: [] };
+export async function collectGdeltSignals() {
+  const signals = [];
+  const errors = [];
 
   for (const kw of GDELT_KEYWORDS) {
     try {
@@ -473,20 +531,33 @@ export async function ingestGdeltSignals(userId = "default") {
         topArticles: fetched.articles,
       });
 
-      if (!normalized) continue;
-
-      const outcome = await processSignal(knex, normalized, userId);
-      if (outcome === "ingested") {
-        results.ingested++;
-        console.log(`[Signal Ingestion] GDELT: ${normalized.title}`);
-      } else if (outcome === "duplicate") {
-        results.skipped++;
-      } else {
-        results.filtered = (results.filtered || 0) + 1;
-      }
+      if (normalized) signals.push(normalized);
     } catch (err) {
       console.warn(`[Signal Ingestion] GDELT failed for "${kw.query}": ${err.message}`);
-      results.errors.push({ keyword: kw.query, error: err.message });
+      errors.push({ keyword: kw.query, error: err.message });
+    }
+  }
+
+  return { source: "gdelt", signals, errors };
+}
+
+/**
+ * Ingest GDELT signals (standalone mode).
+ */
+export async function ingestGdeltSignals(userId = "default") {
+  const { signals, errors } = await collectGdeltSignals();
+  const knex = getKnex();
+  const results = { source: "gdelt", ingested: 0, skipped: 0, filtered: 0, errors };
+
+  for (const signal of signals) {
+    const outcome = await processSignal(knex, signal, userId);
+    if (outcome === "ingested") {
+      results.ingested++;
+      console.log(`[Signal Ingestion] GDELT: ${signal.title}`);
+    } else if (outcome === "duplicate") {
+      results.skipped++;
+    } else {
+      results.filtered++;
     }
   }
 
@@ -496,46 +567,56 @@ export async function ingestGdeltSignals(userId = "default") {
 // ---- ACLED INGESTION ----
 
 /**
- * Ingest conflict signals from ACLED.
- * Fetches weekly events, aggregates by country, detects intensity spikes.
+ * Collect normalized ACLED signals (no DB writes).
  */
-export async function ingestAcledSignals(userId = "default") {
-  const knex = getKnex();
-  const results = { source: "acled", ingested: 0, skipped: 0, filtered: 0, errors: [] };
+export async function collectAcledSignals() {
+  const signals = [];
+  const errors = [];
 
   try {
     const fetched = await fetchAcledEvents({ days: 7, limit: 200 });
     if (!fetched.success) {
-      if (fetched.error && fetched.error.includes("not configured")) {
-        // Silent skip — ACLED not configured
-        return results;
+      if (fetched.error && !fetched.error.includes("not configured")) {
+        errors.push({ error: fetched.error });
       }
-      results.errors.push({ error: fetched.error });
-      return results;
+      return { source: "acled", signals, errors };
     }
 
-    if (fetched.data.length === 0) return results;
+    if (fetched.data.length === 0) return { source: "acled", signals, errors };
 
     const countryAggs = aggregateByCountry(fetched.data);
     const spikes = detectIntensitySpikes(countryAggs);
 
     for (const agg of spikes) {
       const normalized = normalizeAcledSignal(agg);
-      if (!normalized) continue;
-
-      const outcome = await processSignal(knex, normalized, userId);
-      if (outcome === "ingested") {
-        results.ingested++;
-        console.log(`[Signal Ingestion] ACLED: ${normalized.title}`);
-      } else if (outcome === "duplicate") {
-        results.skipped++;
-      } else {
-        results.filtered++;
-      }
+      if (normalized) signals.push(normalized);
     }
   } catch (err) {
     console.warn(`[Signal Ingestion] ACLED failed: ${err.message}`);
-    results.errors.push({ error: err.message });
+    errors.push({ error: err.message });
+  }
+
+  return { source: "acled", signals, errors };
+}
+
+/**
+ * Ingest ACLED conflict signals (standalone mode).
+ */
+export async function ingestAcledSignals(userId = "default") {
+  const { signals, errors } = await collectAcledSignals();
+  const knex = getKnex();
+  const results = { source: "acled", ingested: 0, skipped: 0, filtered: 0, errors };
+
+  for (const signal of signals) {
+    const outcome = await processSignal(knex, signal, userId);
+    if (outcome === "ingested") {
+      results.ingested++;
+      console.log(`[Signal Ingestion] ACLED: ${signal.title}`);
+    } else if (outcome === "duplicate") {
+      results.skipped++;
+    } else {
+      results.filtered++;
+    }
   }
 
   return results;
@@ -603,7 +684,11 @@ export async function warmGdeltBaseline() {
 
 /**
  * Run the full signal ingestion pipeline across all sources.
- * Returns summary of ingested, skipped, and errors per source.
+ *
+ * Flow: providers → normalize → collect batch → consolidate →
+ *       quality filter → score → dedup → DB
+ *
+ * Returns summary of ingested, skipped, consolidated, and errors.
  * Respects INGESTION_MODE: "mock" skips all provider calls.
  */
 export async function runIngestionPipeline(userId = "default") {
@@ -621,35 +706,92 @@ export async function runIngestionPipeline(userId = "default") {
       totalIngested: 0,
       totalSkipped: 0,
       totalFiltered: 0,
+      totalConsolidated: 0,
       totalErrors: 0,
     };
   }
 
   console.log("[Signal Ingestion] Starting full pipeline...");
 
-  const [fred, worldbank, market, news, gdelt, acled] = await Promise.allSettled([
-    ingestFredSignals(userId),
-    ingestWorldBankSignals(userId),
-    ingestMarketSignals(userId),
-    ingestNewsSignals(userId),
-    ingestGdeltSignals(userId),
-    ingestAcledSignals(userId),
+  // ---- Phase 1: Collect normalized signals from all providers in parallel ----
+  const sourceNames = ["fred", "worldbank", "market", "news", "gdelt", "acled"];
+  const settled = await Promise.allSettled([
+    collectFredSignals(),
+    collectWorldBankSignals(),
+    collectMarketSignals(),
+    collectNewsSignals(),
+    collectGdeltSignals(),
+    collectAcledSignals(),
   ]);
 
-  const settled = [fred, worldbank, market, news, gdelt, acled];
-  const sourceNames = ["fred", "worldbank", "market", "news", "gdelt", "acled"];
-  const sources = settled.map((r, i) =>
+  const collections = settled.map((r, i) =>
     r.status === "fulfilled"
       ? r.value
-      : { source: sourceNames[i], ingested: 0, skipped: 0, errors: [{ error: r.reason?.message }] },
+      : { source: sourceNames[i], signals: [], errors: [{ error: r.reason?.message }] },
   );
 
+  // Merge all normalized signals into one batch
+  const allSignals = [];
+  const allErrors = {};
+  for (const col of collections) {
+    for (const sig of col.signals) {
+      sig._source_provider_name = col.source; // track origin for per-source stats
+      allSignals.push(sig);
+    }
+    allErrors[col.source] = col.errors;
+  }
+
+  const rawCount = allSignals.length;
+
+  // ---- Phase 2: Cross-source consolidation ----
+  const consolidated = consolidateSignals(allSignals, { windowMinutes: 30 });
+  const consolidatedCount = rawCount - consolidated.length;
+
+  if (consolidatedCount > 0) {
+    console.log(`[Signal Ingestion] Consolidated: ${rawCount} raw → ${consolidated.length} signals (${consolidatedCount} merged).`);
+  }
+
+  // ---- Phase 3: Quality filter → score → dedup → store ----
+  const knex = getKnex();
+  const perSourceResults = {};
+  for (const name of sourceNames) {
+    perSourceResults[name] = { source: name, ingested: 0, skipped: 0, filtered: 0, consolidated: 0, errors: allErrors[name] || [] };
+  }
+
+  for (const signal of consolidated) {
+    const sourceName = signal._source_provider_name || signal.source || "other";
+    const stats = perSourceResults[sourceName] || perSourceResults.other || { ingested: 0, skipped: 0, filtered: 0 };
+
+    const outcome = await processSignal(knex, signal, userId);
+    if (outcome === "ingested") {
+      stats.ingested++;
+      console.log(`[Signal Ingestion] ${sourceName.toUpperCase()}: ${signal.title}`);
+    } else if (outcome === "duplicate") {
+      stats.skipped++;
+    } else {
+      stats.filtered++;
+    }
+  }
+
+  // Mark consolidated counts based on reduction
+  // Distribute consolidation proportionally by source
+  if (consolidatedCount > 0) {
+    for (const col of collections) {
+      const sourceRawCount = col.signals.length;
+      const sourceConsolidatedCount = consolidated.filter(
+        (s) => (s._source_provider_name || s.source) === col.source,
+      ).length;
+      perSourceResults[col.source].consolidated = Math.max(0, sourceRawCount - sourceConsolidatedCount);
+    }
+  }
+
+  const sources = sourceNames.map((name) => perSourceResults[name]);
   const totalIngested = sources.reduce((s, r) => s + r.ingested, 0);
   const totalSkipped = sources.reduce((s, r) => s + r.skipped, 0);
-  const totalFiltered = sources.reduce((s, r) => s + (r.filtered || 0), 0);
+  const totalFiltered = sources.reduce((s, r) => s + r.filtered, 0);
   const totalErrors = sources.reduce((s, r) => s + r.errors.length, 0);
 
-  console.log(`[Signal Ingestion] Complete: ${totalIngested} ingested, ${totalSkipped} deduped, ${totalFiltered} filtered, ${totalErrors} errors.`);
+  console.log(`[Signal Ingestion] Complete: ${totalIngested} ingested, ${totalSkipped} deduped, ${totalFiltered} filtered, ${consolidatedCount} consolidated, ${totalErrors} errors.`);
 
-  return { sources, totalIngested, totalSkipped, totalFiltered, totalErrors };
+  return { sources, totalIngested, totalSkipped, totalFiltered, totalConsolidated: consolidatedCount, totalErrors };
 }

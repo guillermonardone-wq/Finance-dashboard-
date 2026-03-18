@@ -265,7 +265,7 @@ describe("runIngestionPipeline includes GDELT", () => {
     );
 
     // Pipeline must include GDELT
-    expect(source).toContain("ingestGdeltSignals(userId)");
+    expect(source).toContain("collectGdeltSignals()");
     // Pipeline results must include gdelt source
     expect(source).toContain('"gdelt"');
   });

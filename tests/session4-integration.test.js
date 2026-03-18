@@ -341,20 +341,23 @@ describe("unified ingestion pipeline integrity", () => {
     expect(source).toContain('"acled"');
   });
 
-  it("pipeline calls all 6 sources in parallel", async () => {
+  it("pipeline collects all 6 sources in parallel then consolidates", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync(
       new URL("../server/services/signal-ingestion.js", import.meta.url),
       "utf-8",
     );
 
-    // Should destructure 6 results
-    expect(source).toContain("ingestAcledSignals(userId)");
-    expect(source).toContain("ingestFredSignals(userId)");
-    expect(source).toContain("ingestWorldBankSignals(userId)");
-    expect(source).toContain("ingestMarketSignals(userId)");
-    expect(source).toContain("ingestNewsSignals(userId)");
-    expect(source).toContain("ingestGdeltSignals(userId)");
+    // Should call collect functions for all 6 sources
+    expect(source).toContain("collectFredSignals()");
+    expect(source).toContain("collectWorldBankSignals()");
+    expect(source).toContain("collectMarketSignals()");
+    expect(source).toContain("collectNewsSignals()");
+    expect(source).toContain("collectGdeltSignals()");
+    expect(source).toContain("collectAcledSignals()");
+
+    // Should consolidate the batch before processing
+    expect(source).toContain("consolidateSignals(allSignals");
   });
 
   it("legacy files are in legacy/ folder, not in active services/", async () => {
