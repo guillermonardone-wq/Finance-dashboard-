@@ -1,12 +1,14 @@
 // ============================================================
 // SIGNAL INGESTION PIPELINE
 // ============================================================
-// Orchestrates: provider → normalizer → dedup → DB
+// Orchestrates: provider → normalizer → quality → dedup → DB
 //
 // Responsibilities:
 // - Call providers for raw data
 // - Normalize into standard signal format
-// - Dedup by entity + category within time window
+// - Quality filter (drop weak / zero-change signals)
+// - Score (strength + confidence)
+// - Dedup by entity + category + direction within time window
 // - Store in signals table
 // ============================================================
 
@@ -20,14 +22,15 @@ import {
   normalizeNewsSignal,
   normalizeGdeltSignal,
 } from "./signal-normalizer.js";
+import { qualityFilter, scoreSignal } from "./signal-quality.js";
 import config from "../config.js";
 
-// Dedup window: skip signals for same entity+category within this many hours
-const DEDUP_WINDOW_HOURS = 6;
+// Dedup window: skip signals for same entity+category+direction within this many minutes
+const DEDUP_WINDOW_MINUTES = 60;
 
 /**
  * Check if a signal with the same raw_source already exists.
- * Also checks entity+category within the dedup window.
+ * Also checks entity+category+direction within the dedup window.
  */
 async function isDuplicate(knex, signal, userId) {
   // Exact dedup by raw_source
@@ -38,17 +41,45 @@ async function isDuplicate(knex, signal, userId) {
     if (existing) return true;
   }
 
-  // Window dedup: same entity + category within DEDUP_WINDOW_HOURS
+  // Window dedup: same entity + category + direction within window
   if (signal.entity && signal.category) {
-    const cutoff = new Date(Date.now() - DEDUP_WINDOW_HOURS * 3600 * 1000).toISOString();
-    const recent = await knex("signals")
+    const cutoff = new Date(Date.now() - DEDUP_WINDOW_MINUTES * 60 * 1000).toISOString();
+    let query = knex("signals")
       .where({ entity: signal.entity, category: signal.category, user_id: userId })
-      .where("created_at", ">", cutoff)
-      .first();
+      .where("created_at", ">", cutoff);
+    if (signal.direction) {
+      query = query.where("direction", signal.direction);
+    }
+    const recent = await query.first();
     if (recent) return true;
   }
 
   return false;
+}
+
+/**
+ * Process a single normalized signal through the quality pipeline:
+ * quality filter → score → dedup → store.
+ *
+ * @returns {"ingested"|"filtered"|"duplicate"}
+ */
+async function processSignal(knex, signal, userId) {
+  // Quality gate
+  const { pass, reason } = qualityFilter(signal);
+  if (!pass) return "filtered";
+
+  // Score the signal
+  const { strength, confidence } = scoreSignal(signal);
+  signal.signal_strength = Math.min(1, strength / 10);
+  signal._strength = strength;
+  signal._confidence = confidence;
+
+  // Dedup
+  if (await isDuplicate(knex, signal, userId)) return "duplicate";
+
+  // Store
+  await storeSignal(knex, signal, userId);
+  return "ingested";
 }
 
 /**
@@ -157,14 +188,15 @@ export async function ingestFredSignals(userId = "default") {
         stdDev,
       });
 
-      if (await isDuplicate(knex, normalized, userId)) {
+      const outcome = await processSignal(knex, normalized, userId);
+      if (outcome === "ingested") {
+        results.ingested++;
+        console.log(`[Signal Ingestion] FRED: ${normalized.title}`);
+      } else if (outcome === "duplicate") {
         results.skipped++;
-        continue;
+      } else {
+        results.filtered = (results.filtered || 0) + 1;
       }
-
-      await storeSignal(knex, normalized, userId);
-      results.ingested++;
-      console.log(`[Signal Ingestion] FRED: ${normalized.title}`);
     } catch (err) {
       results.errors.push({ series: series.id, error: err.message });
     }
@@ -224,13 +256,10 @@ export async function ingestWorldBankSignals(userId = "default") {
           continue;
         }
 
-        if (await isDuplicate(knex, normalized, userId)) {
-          results.skipped++;
-          continue;
-        }
-
-        await storeSignal(knex, normalized, userId);
-        results.ingested++;
+        const outcome = await processSignal(knex, normalized, userId);
+        if (outcome === "ingested") results.ingested++;
+        else if (outcome === "duplicate") results.skipped++;
+        else results.filtered = (results.filtered || 0) + 1;
       }
     } catch (err) {
       results.errors.push({ indicator: indicator.code, error: err.message });
@@ -282,14 +311,15 @@ export async function ingestMarketSignals(userId = "default") {
         timestamp: new Date().toISOString(),
       });
 
-      if (await isDuplicate(knex, normalized, userId)) {
+      const outcome = await processSignal(knex, normalized, userId);
+      if (outcome === "ingested") {
+        results.ingested++;
+        console.log(`[Signal Ingestion] Market: ${normalized.title}`);
+      } else if (outcome === "duplicate") {
         results.skipped++;
-        continue;
+      } else {
+        results.filtered = (results.filtered || 0) + 1;
       }
-
-      await storeSignal(knex, normalized, userId);
-      results.ingested++;
-      console.log(`[Signal Ingestion] Market: ${normalized.title}`);
     } catch (err) {
       results.errors.push({ symbol: item.symbol, error: err.message });
     }
@@ -321,13 +351,10 @@ export async function ingestNewsSignals(userId = "default") {
         provider: result.provider,
       });
 
-      if (await isDuplicate(knex, normalized, userId)) {
-        results.skipped++;
-        continue;
-      }
-
-      await storeSignal(knex, normalized, userId);
-      results.ingested++;
+      const outcome = await processSignal(knex, normalized, userId);
+      if (outcome === "ingested") results.ingested++;
+      else if (outcome === "duplicate") results.skipped++;
+      else results.filtered = (results.filtered || 0) + 1;
     }
   } catch (err) {
     results.errors.push({ error: err.message });
@@ -446,14 +473,15 @@ export async function ingestGdeltSignals(userId = "default") {
 
       if (!normalized) continue;
 
-      if (await isDuplicate(knex, normalized, userId)) {
+      const outcome = await processSignal(knex, normalized, userId);
+      if (outcome === "ingested") {
+        results.ingested++;
+        console.log(`[Signal Ingestion] GDELT: ${normalized.title}`);
+      } else if (outcome === "duplicate") {
         results.skipped++;
-        continue;
+      } else {
+        results.filtered = (results.filtered || 0) + 1;
       }
-
-      await storeSignal(knex, normalized, userId);
-      results.ingested++;
-      console.log(`[Signal Ingestion] GDELT: ${normalized.title}`);
     } catch (err) {
       console.warn(`[Signal Ingestion] GDELT failed for "${kw.query}": ${err.message}`);
       results.errors.push({ keyword: kw.query, error: err.message });
@@ -507,9 +535,10 @@ export async function runIngestionPipeline(userId = "default") {
 
   const totalIngested = sources.reduce((s, r) => s + r.ingested, 0);
   const totalSkipped = sources.reduce((s, r) => s + r.skipped, 0);
+  const totalFiltered = sources.reduce((s, r) => s + (r.filtered || 0), 0);
   const totalErrors = sources.reduce((s, r) => s + r.errors.length, 0);
 
-  console.log(`[Signal Ingestion] Complete: ${totalIngested} ingested, ${totalSkipped} deduped, ${totalErrors} errors.`);
+  console.log(`[Signal Ingestion] Complete: ${totalIngested} ingested, ${totalSkipped} deduped, ${totalFiltered} filtered, ${totalErrors} errors.`);
 
-  return { sources, totalIngested, totalSkipped, totalErrors };
+  return { sources, totalIngested, totalSkipped, totalFiltered, totalErrors };
 }
