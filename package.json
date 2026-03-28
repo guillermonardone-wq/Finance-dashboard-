@@ -14,7 +14,7 @@
     "seed": "node server/seed.js",
     "db:migrate": "knex migrate:latest --knexfile knexfile.js --esm",
     "db:rollback": "knex migrate:rollback --knexfile knexfile.js --esm",
-    "db:seed": "knex seed:run --knexfile knexfile.js --esm",
+
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -42,7 +42,20 @@ npm run dev:client   # Vite dev server (port 5173, proxies /api to 3002)
 npm run dev:server   # Express API server (port 3002)
 ```
 
-The database auto-migrates (Knex migrations) and seeds on first run.
+The database auto-migrates (Knex migrations) and seeds on first run. The server retries DB connections on startup (up to 10 attempts with exponential backoff), so it's safe to start the app before PostgreSQL is fully ready.
+
+### Manual migration
+
+```bash
+# Run migrations via Knex CLI
+npm run db:migrate
+
+# Rollback last batch
+npm run db:rollback
+
+# Manual seed (if DB is empty, auto-seed runs on startup)
+npm run seed
+```
 
 ## Environment variables
 
@@ -63,6 +76,8 @@ See `.env.example` for the full list. Key variables:
 | `NEWSAPI_API_KEY` | News headlines | (disabled without key) |
 | `ALPHA_VANTAGE_API_KEY` | Price data | (disabled without key) |
 | `ANTHROPIC_API_KEY` | LLM advisory evaluation | (disabled without key) |
+| `INGESTION_MODE` | Signal ingestion: `live` or `mock` | `live` |
+| `REFRESH_INTERVAL_INGESTION` | Ingestion pipeline interval (seconds) | `900` |
 
 All API keys are optional. The app runs fully without any external providers.
 
@@ -70,7 +85,9 @@ All API keys are optional. The app runs fully without any external providers.
 
 ```bash
 # Run all tests — scoring engine, classification, gates, checklist,
-# thesis repo safety, column allowlist (vitest, 173 tests)
+# thesis repo safety, column allowlist, config, auth, system health,
+# provider health, dead letter queue, user_id scoping, integration startup,
+# signal normalizer, signal ingestion, scheduler, GDELT, signal quality, ACLED, session 4 integration, batch consolidation (vitest, 385 tests)
 npm test
 
 # Watch mode
@@ -110,5 +127,5 @@ npm run test:watch
 - All config centralized in `server/config.js` — no `process.env` outside that file
 - Provider health tracked in `provider_health` table, auto-updated on every provider call
 - Failed async jobs logged to `dead_letter_queue` with exponential backoff retry
-- 173 automated tests covering scoring, classification, gates, checklist, thesis repo safety
+- 385 automated tests covering scoring, classification, gates, checklist, thesis repo safety, config, auth, system health, provider health, dead letter queue, user_id scoping, integration startup, signal normalizer, signal ingestion, scheduler, GDELT ingestion, signal quality, ACLED provider, Polymarket scoring wire, session 4 integration, batch consolidation
 - Root-level ErrorBoundary catches crashes in any route

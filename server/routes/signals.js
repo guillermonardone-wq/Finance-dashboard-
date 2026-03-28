@@ -6,19 +6,34 @@ const router = Router();
 
 // GET all signals
 router.get("/", async (req, res) => {
-  const { status, category, thesis_id } = req.query;
-  const rows = await signalRepo.findAll({ status, category, thesis_id });
+  const { status, category, thesis_id, source, entity, limit } = req.query;
+  const userId = req.userId || "default";
+  const rows = await signalRepo.findAll({ status, category, thesis_id, source, entity, limit }, userId);
   res.json(rows);
+});
+
+// GET check for duplicate signal
+router.get("/check-duplicate", async (req, res) => {
+  const { title, entity, category } = req.query;
+  const userId = req.userId || "default";
+  try {
+    const match = await signalRepo.checkDuplicate({ title, entity, category }, userId);
+    res.json({ duplicate: !!match, match: match || null });
+  } catch (err) {
+    res.json({ duplicate: false, match: null });
+  }
 });
 
 // GET signal counts by status
 router.get("/counts", async (req, res) => {
-  res.json(await signalRepo.countsByStatus());
+  const userId = req.userId || "default";
+  res.json(await signalRepo.countsByStatus(userId));
 });
 
 // GET single signal
 router.get("/:id", async (req, res) => {
-  const signal = await signalRepo.findById(req.params.id);
+  const userId = req.userId || "default";
+  const signal = await signalRepo.findById(req.params.id, userId);
   if (!signal) return res.status(404).json({ error: "Signal not found" });
   res.json(signal);
 });
@@ -39,7 +54,8 @@ router.post("/", async (req, res) => {
 
   try {
     const id = uuidv4();
-    const created = await signalRepo.create(id, s);
+    const userId = req.userId || "default";
+    const created = await signalRepo.create(id, s, userId);
     if (!created) {
       console.error(
         `[Signals] POST / — INSERT succeeded but SELECT returned null for id=${id}`,
@@ -60,7 +76,8 @@ router.post("/", async (req, res) => {
 // PUT update signal
 router.put("/:id", async (req, res) => {
   try {
-    const updated = await signalRepo.update(req.params.id, req.body);
+    const userId = req.userId || "default";
+    const updated = await signalRepo.update(req.params.id, req.body, userId);
     if (!updated) return res.status(404).json({ error: "Signal not found" });
     res.json(updated);
   } catch (err) {
@@ -73,7 +90,8 @@ router.put("/:id", async (req, res) => {
 
 // DELETE signal
 router.delete("/:id", async (req, res) => {
-  await signalRepo.remove(req.params.id);
+  const userId = req.userId || "default";
+  await signalRepo.remove(req.params.id, userId);
   res.json({ deleted: true });
 });
 

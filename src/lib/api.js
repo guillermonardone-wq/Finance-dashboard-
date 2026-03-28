@@ -22,11 +22,15 @@ export const api = {
   updateThesis: (id, data) =>
     request(`/theses/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteThesis: (id) => request(`/theses/${id}`, { method: "DELETE" }),
+  createThesisFromCluster: (data) =>
+    request("/theses/from-cluster", { method: "POST", body: JSON.stringify(data) }),
 
   // Signals
   getSignals: (params) =>
     request(`/signals?${new URLSearchParams(params || {})}`),
   getSignalCounts: () => request("/signals/counts"),
+  checkSignalDuplicate: (params) =>
+    request(`/signals/check-duplicate?${new URLSearchParams(params || {})}`),
   getSignal: (id) => request(`/signals/${id}`),
   createSignal: (data) =>
     request("/signals", { method: "POST", body: JSON.stringify(data) }),

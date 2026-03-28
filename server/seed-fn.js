@@ -2,6 +2,17 @@
 import { v4 as uuidv4 } from "uuid";
 import { getKnex } from "./db/connection.js";
 
+/**
+ * Safely serialize a value for PostgreSQL jsonb columns.
+ * Knex sometimes passes JS objects/arrays without JSON.stringify,
+ * causing "invalid input syntax for type json" errors.
+ */
+function jsonb(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value; // already serialized
+  return JSON.stringify(value);
+}
+
 export async function seed() {
   const knex = getKnex();
 
@@ -20,51 +31,51 @@ export async function seed() {
     updated_at: now,
     title: "Strait of Hormuz Disruption Risk — Oil Spike Scenario",
     thesis_statement: "Escalating Iran-Israel tensions combined with Houthi attacks on shipping create a plausible scenario where Strait of Hormuz traffic is materially disrupted, causing oil to spike 20-40% within days. Market is underpricing this tail risk given current implied vol on crude options.",
-    causal_chain: [
+    causal_chain: jsonb([
       "Iran-Israel escalation leads to direct confrontation or proxy attacks on Gulf shipping",
       "Insurance costs for tankers transiting Hormuz rise sharply, causing routing changes",
       "Effective throughput drops 15-30%, creating real supply deficit",
       "Oil spikes as physical market tightens and speculative demand surges",
       "Energy-importing nations (Japan, Korea, India, Europe) face currency pressure and inflation spike",
-    ],
-    affected_assets: [
+    ]),
+    affected_assets: jsonb([
       { asset: "CL (WTI Crude)", direction: "long", mechanism: "Supply disruption → price spike" },
       { asset: "XLE (Energy ETF)", direction: "long", mechanism: "Energy equities benefit from higher oil" },
       { asset: "EWJ (Japan ETF)", direction: "short", mechanism: "Energy import dependence → currency/equity pressure" },
       { asset: "USO (Oil ETF)", direction: "long", mechanism: "Direct oil exposure" },
-    ],
-    expected_timeline: { start: "2026-03-15", end: "2026-06-30", basis: "Escalation cycle typically resolves or escalates within 90 days" },
+    ]),
+    expected_timeline: jsonb({ start: "2026-03-15", end: "2026-06-30", basis: "Escalation cycle typically resolves or escalates within 90 days" }),
     probability_low: 0.15,
     probability_high: 0.45,
     probability_best: 0.25,
-    market_pricing_assessment: { description: "Crude vol curve is relatively flat. OTM calls on CL are cheap relative to the tail risk. Market is pricing ~10% disruption probability, I estimate 15-25%.", implied_prob: "0.10", gap_size: "moderate" },
-    key_assumptions: ["Iran is willing to escalate beyond rhetoric", "US does not intervene to de-escalate before disruption", "Disruption lasts more than 72 hours", "SPR releases are insufficient to offset physical shortage"],
-    alternative_explanations: ["Tensions de-escalate through diplomatic channel", "Disruption is brief and market absorbs it quickly", "Saudi spare capacity offsets the loss"],
-    leading_indicators: [
+    market_pricing_assessment: jsonb({ description: "Crude vol curve is relatively flat. OTM calls on CL are cheap relative to the tail risk. Market is pricing ~10% disruption probability, I estimate 15-25%.", implied_prob: "0.10", gap_size: "moderate" }),
+    key_assumptions: jsonb(["Iran is willing to escalate beyond rhetoric", "US does not intervene to de-escalate before disruption", "Disruption lasts more than 72 hours", "SPR releases are insufficient to offset physical shortage"]),
+    alternative_explanations: jsonb(["Tensions de-escalate through diplomatic channel", "Disruption is brief and market absorbs it quickly", "Saudi spare capacity offsets the loss"]),
+    leading_indicators: jsonb([
       { indicator: "Tanker insurance rates for Hormuz transit", current_state: "Elevated but not extreme", target_state: "Spike >3x baseline" },
       { indicator: "Iranian naval activity in the Gulf", current_state: "Increased patrols", target_state: "Live interdiction attempts" },
       { indicator: "Crude options implied volatility", current_state: "Moderate", target_state: "Sharp spike in OTM calls" },
-    ],
-    confirming_indicators: [
+    ]),
+    confirming_indicators: jsonb([
       { indicator: "Actual tanker rerouting away from Hormuz", current_state: "Minimal", target_state: "Significant rerouting" },
       { indicator: "Physical crude spot premium over futures", current_state: "Slight backwardation", target_state: "Sharp backwardation" },
-    ],
-    invalidating_indicators: [
+    ]),
+    invalidating_indicators: jsonb([
       { indicator: "Iran-Israel diplomatic breakthrough", current_state: "No talks", target_state: "Formal ceasefire/talks" },
       { indicator: "US naval presence drawdown in Gulf", current_state: "Reinforced", target_state: "Reduced" },
-    ],
-    disconfirming_evidence: [
+    ]),
+    disconfirming_evidence: jsonb([
       "Iran has historically avoided direct disruption of Hormuz due to self-harm (they export through it too)",
       "Saudi spare capacity is reportedly 2-3mbpd, which could offset a partial disruption",
       "US SPR releases could dampen price impact in the short term",
-    ],
+    ]),
     strongest_bear_case: "Iran has strong self-interest in keeping Hormuz open for its own exports. A full closure would hurt Iran as much as its adversaries. Historical precedent shows Iran threatens but rarely follows through on full strait closure.",
     what_would_make_opposite_stronger: "If Saudi Arabia credibly commits to offsetting any supply loss with spare capacity, AND the US signals willingness to release SPR at scale, the market may correctly price this as a contained event.",
     early_vs_right: "If insurance rates spike but tankers continue transiting, that suggests market is pricing the risk but physical disruption has not materialized. Early signal: watch for actual rerouting, not just price increases.",
     status: "active",
     classification: "DEVELOP",
     composite_score: 52.0,
-    tags: ["energy", "geopolitics", "oil", "iran", "hormuz"],
+    tags: jsonb(["energy", "geopolitics", "oil", "iran", "hormuz"]),
   });
 
   await knex("theses").insert({
@@ -74,36 +85,36 @@ export async function seed() {
     updated_at: now,
     title: "BoJ Policy Surprise — JPY Strengthening",
     thesis_statement: "Bank of Japan is running out of room to maintain yield curve control. Rising domestic inflation and political pressure will force a policy shift sooner than consensus expects, leading to rapid JPY appreciation and unwinding of carry trades.",
-    causal_chain: [
+    causal_chain: jsonb([
       "Japanese CPI continues to run above BoJ target",
       "Political pressure mounts as weak yen hurts households",
       "BoJ signals or implements YCC band widening or abandonment",
       "JPY carry trades unwind rapidly as yield differential narrows",
       "Global risk assets face selling pressure as yen funding costs rise",
-    ],
-    affected_assets: [
+    ]),
+    affected_assets: jsonb([
       { asset: "USD/JPY", direction: "short", mechanism: "JPY strengthens on policy normalization" },
       { asset: "EWJ (Japan ETF)", direction: "short", mechanism: "Strong yen hurts exporters initially" },
       { asset: "TLT (US Treasuries)", direction: "long", mechanism: "Carry trade unwind flows into safe havens" },
-    ],
-    expected_timeline: { start: "2026-04-01", end: "2026-07-31", basis: "BoJ meetings in April and June are key decision points" },
+    ]),
+    expected_timeline: jsonb({ start: "2026-04-01", end: "2026-07-31", basis: "BoJ meetings in April and June are key decision points" }),
     probability_low: 0.2,
     probability_high: 0.5,
     probability_best: 0.35,
-    market_pricing_assessment: { description: "Market is pricing gradual normalization over 12+ months. I think the timeline could compress to 3-6 months.", implied_prob: "0.15", gap_size: "significant" },
-    key_assumptions: ["BoJ leadership is willing to move faster than communicated", "Domestic inflation stays elevated", "Political pressure is sufficient to override BoJ institutional inertia"],
-    alternative_explanations: ["BoJ maintains current pace — slow and predictable", "Global risk-off event causes yen strengthening independent of BoJ action", "US rate cuts narrow the differential without BoJ action needed"],
-    leading_indicators: [{ indicator: "Japanese CPI trajectory", current_state: "Above target", target_state: "Above target and accelerating" }],
-    confirming_indicators: [{ indicator: "BoJ forward guidance language shift", current_state: "Cautiously hawkish", target_state: "Explicitly hawkish" }],
-    invalidating_indicators: [{ indicator: "Japanese CPI falls below target", current_state: "Above target", target_state: "Below 2%" }],
-    disconfirming_evidence: ["BoJ has a long history of being more dovish than expected", "Governor Ueda has communicated a very gradual approach", "Carry trade positioning may already be lighter than peak"],
+    market_pricing_assessment: jsonb({ description: "Market is pricing gradual normalization over 12+ months. I think the timeline could compress to 3-6 months.", implied_prob: "0.15", gap_size: "significant" }),
+    key_assumptions: jsonb(["BoJ leadership is willing to move faster than communicated", "Domestic inflation stays elevated", "Political pressure is sufficient to override BoJ institutional inertia"]),
+    alternative_explanations: jsonb(["BoJ maintains current pace — slow and predictable", "Global risk-off event causes yen strengthening independent of BoJ action", "US rate cuts narrow the differential without BoJ action needed"]),
+    leading_indicators: jsonb([{ indicator: "Japanese CPI trajectory", current_state: "Above target", target_state: "Above target and accelerating" }]),
+    confirming_indicators: jsonb([{ indicator: "BoJ forward guidance language shift", current_state: "Cautiously hawkish", target_state: "Explicitly hawkish" }]),
+    invalidating_indicators: jsonb([{ indicator: "Japanese CPI falls below target", current_state: "Above target", target_state: "Below 2%" }]),
+    disconfirming_evidence: jsonb(["BoJ has a long history of being more dovish than expected", "Governor Ueda has communicated a very gradual approach", "Carry trade positioning may already be lighter than peak"]),
     strongest_bear_case: "BoJ institutional culture is extremely conservative. Ueda has repeatedly signaled patience. Forcing a rapid shift would go against decades of institutional behavior.",
     what_would_make_opposite_stronger: "If Japanese CPI drops below target and wage growth stalls, the entire premise collapses. Also, if the Fed cuts rates aggressively, the carry trade unwind happens via the US side, not the Japan side.",
     early_vs_right: "Early signals: watch for BoJ meeting minutes showing dissent, or unofficial briefings suggesting accelerated timeline. If these do not appear by mid-April, I may be early.",
     status: "active",
     classification: "WATCH",
     composite_score: 41.0,
-    tags: ["fx", "japan", "boj", "carry_trade", "macro"],
+    tags: jsonb(["fx", "japan", "boj", "carry_trade", "macro"]),
   });
 
   // === SIGNALS ===
@@ -136,8 +147,8 @@ export async function seed() {
       thesis_id: s.thesis_id || null,
       status: s.status,
       source_attribution: s.source_attribution || "Manual entry",
-      tags: [],
-      related_signal_ids: [],
+      tags: jsonb([]),
+      related_signal_ids: jsonb([]),
     });
   }
 
@@ -164,7 +175,7 @@ export async function seed() {
       observation_type: obs.type,
       symbol: obs.symbol,
       name: obs.name,
-      data: obs.data,
+      data: jsonb(obs.data),
     });
   }
 
@@ -185,9 +196,9 @@ export async function seed() {
   const pmEvent3Id = uuidv4();
 
   const pmEvents = [
-    { id: pmEvent1Id, external_market_id: "pm-hormuz-closure-2026", title: "Will Iran close the Strait of Hormuz by June 30, 2026?", description: "This market resolves YES if the Strait of Hormuz is closed to commercial shipping for 24+ consecutive hours due to Iranian military action before June 30, 2026.", url: "https://polymarket.com/event/hormuz-closure-2026", category: "geopolitics", open_time: "2026-01-15T00:00:00Z", close_time: "2026-06-30T23:59:59Z", tags_json: ["iran", "hormuz", "oil", "geopolitics"] },
-    { id: pmEvent2Id, external_market_id: "pm-oil-above-100-q2", title: "Will WTI Crude Oil trade above $100/barrel in Q2 2026?", description: "This market resolves YES if WTI Crude Oil (front-month futures) trades at or above $100.00 per barrel at any point between April 1 and June 30, 2026.", url: "https://polymarket.com/event/oil-100-q2-2026", category: "energy", open_time: "2026-02-01T00:00:00Z", close_time: "2026-06-30T23:59:59Z", tags_json: ["oil", "energy", "commodities"] },
-    { id: pmEvent3Id, external_market_id: "pm-boj-rate-hike-apr", title: "Will the Bank of Japan raise rates at the April 2026 meeting?", description: "This market resolves YES if the Bank of Japan announces an interest rate increase at or following its April 24-25, 2026 monetary policy meeting.", url: "https://polymarket.com/event/boj-rate-hike-april-2026", category: "macro", open_time: "2026-02-15T00:00:00Z", close_time: "2026-04-25T23:59:59Z", tags_json: ["japan", "boj", "rates", "macro"] },
+    { id: pmEvent1Id, external_market_id: "pm-hormuz-closure-2026", title: "Will Iran close the Strait of Hormuz by June 30, 2026?", description: "This market resolves YES if the Strait of Hormuz is closed to commercial shipping for 24+ consecutive hours due to Iranian military action before June 30, 2026.", url: "https://polymarket.com/event/hormuz-closure-2026", category: "geopolitics", open_time: "2026-01-15T00:00:00Z", close_time: "2026-06-30T23:59:59Z", tags_json: jsonb(["iran", "hormuz", "oil", "geopolitics"]) },
+    { id: pmEvent2Id, external_market_id: "pm-oil-above-100-q2", title: "Will WTI Crude Oil trade above $100/barrel in Q2 2026?", description: "This market resolves YES if WTI Crude Oil (front-month futures) trades at or above $100.00 per barrel at any point between April 1 and June 30, 2026.", url: "https://polymarket.com/event/oil-100-q2-2026", category: "energy", open_time: "2026-02-01T00:00:00Z", close_time: "2026-06-30T23:59:59Z", tags_json: jsonb(["oil", "energy", "commodities"]) },
+    { id: pmEvent3Id, external_market_id: "pm-boj-rate-hike-apr", title: "Will the Bank of Japan raise rates at the April 2026 meeting?", description: "This market resolves YES if the Bank of Japan announces an interest rate increase at or following its April 24-25, 2026 monetary policy meeting.", url: "https://polymarket.com/event/boj-rate-hike-april-2026", category: "macro", open_time: "2026-02-15T00:00:00Z", close_time: "2026-04-25T23:59:59Z", tags_json: jsonb(["japan", "boj", "rates", "macro"]) },
   ];
 
   for (const e of pmEvents) {

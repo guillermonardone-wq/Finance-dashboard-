@@ -57,6 +57,8 @@ const config = {
       "https://api.unusualwhales.com",
     ),
     polygon: envStr("POLYGON_API_KEY"),
+    acledApiKey: envStr("ACLED_API_KEY"),
+    acledEmail: envStr("ACLED_EMAIL"),
   },
 
   // LLM Advisory
@@ -77,8 +79,12 @@ const config = {
     ttlMacro: envInt("CACHE_TTL_MACRO", 3600),
   },
 
+  // Ingestion mode: "live" (call real providers) or "mock" (skip provider calls)
+  ingestionMode: envStr("INGESTION_MODE", "live"),
+
   // Refresh intervals (seconds)
   refresh: {
+    ingestion: envInt("REFRESH_INTERVAL_INGESTION", 900),
     prices: envInt("REFRESH_INTERVAL_PRICES", 300),
     news: envInt("REFRESH_INTERVAL_NEWS", 900),
     macro: envInt("REFRESH_INTERVAL_MACRO", 3600),

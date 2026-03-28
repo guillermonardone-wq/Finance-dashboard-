@@ -1,5 +1,10 @@
 // ============================================================
-// FRED SIGNAL GENERATOR — Creates signals from significant FRED data changes
+// LEGACY — FRED SIGNAL GENERATOR (reference only)
+// ============================================================
+// This file is NO LONGER on the active ingestion path.
+// FRED ingestion is now handled by signal-ingestion.js via
+// ingestFredSignals() and normalizeFredSignal().
+// Retained as reference for the statistical threshold algorithm.
 // ============================================================
 
 import { v4 as uuidv4 } from "uuid";

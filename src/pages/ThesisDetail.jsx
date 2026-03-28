@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { useThesisStore } from "../store/useThesisStore";
 import { useSignalStore } from "../store/useSignalStore";
 import { useThesisEvaluation } from "../hooks/useThesisEvaluation";
@@ -35,6 +35,9 @@ const TABS = [
  */
 export default function ThesisDetail() {
   const { id } = useParams();
+  const location = useLocation();
+  const fromCluster = location.state?.fromCluster;
+  const clusterTitle = location.state?.clusterTitle;
   const { activeThesis, fetchThesis, loading, error } = useThesisStore();
   const { signals, fetchSignals } = useSignalStore();
   const [tab, setTab] = useState("Overview");
@@ -100,6 +103,17 @@ export default function ThesisDetail() {
 
   return (
     <div className="p-6 max-w-5xl">
+      {/* From-cluster creation banner */}
+      {fromCluster && (
+        <div className="mb-4 p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg flex items-center gap-3">
+          <span className="text-emerald-400 text-sm">⚡</span>
+          <div>
+            <p className="text-sm text-emerald-400 font-medium">Created from Bot Feed cluster{clusterTitle ? `: ${clusterTitle}` : ''}</p>
+            <p className="text-xs text-slate-500">Review and refine this draft. Signals are already linked.</p>
+          </div>
+        </div>
+      )}
+
       {/* Header + score summary — always visible */}
       <ThesisHeader
         thesis={thesis}

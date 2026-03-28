@@ -1,9 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   PRE_TRADE_CHECKLIST,
   runChecklist,
   getMaxPositionSize,
 } from "../../engine/behavioral.js";
+
+// Priority order: failed items first, then unanswered, then passed
+const STATUS_PRIORITY = { failed: 0, warning: 1, unanswered: 2, pending: 3, passed: 4 };
 
 const STATUS_STYLES = {
   passed: "border-emerald-400/30 bg-emerald-400/5 text-emerald-400",
@@ -33,6 +36,8 @@ const CATEGORY_LABELS = {
 
 export default function ChecklistTab({ thesis }) {
   const [answers, setAnswers] = useState({});
+  const [showFullChecklist, setShowFullChecklist] = useState(false);
+  const [collapsedCats, setCollapsedCats] = useState(new Set());
 
   const result = useMemo(() => runChecklist(answers), [answers]);
 
@@ -45,7 +50,16 @@ export default function ChecklistTab({ thesis }) {
     setAnswers((prev) => ({ ...prev, [id]: value }));
   }
 
-  // Group items by category
+  const toggleCategory = useCallback((cat) => {
+    setCollapsedCats(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  }, []);
+
+  // Group items by category, sort by priority (failed/unanswered first)
   const grouped = useMemo(() => {
     const groups = {};
     for (const item of result.items) {
@@ -53,8 +67,31 @@ export default function ChecklistTab({ thesis }) {
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(item);
     }
+    // Sort items within each group: blockers first
+    for (const cat of Object.keys(groups)) {
+      groups[cat].sort((a, b) => (STATUS_PRIORITY[a.status] ?? 3) - (STATUS_PRIORITY[b.status] ?? 3));
+    }
     return groups;
   }, [result.items]);
+
+  // Sort categories: those with failures first
+  const sortedCategories = useMemo(() => {
+    return Object.entries(grouped).sort(([, a], [, b]) => {
+      const aHasFail = a.some(i => i.status === 'failed') ? 0 : 1;
+      const bHasFail = b.some(i => i.status === 'failed') ? 0 : 1;
+      return aHasFail - bHasFail;
+    });
+  }, [grouped]);
+
+  // Next action guidance
+  const nextAction = useMemo(() => {
+    if (result.blocks.length > 0) return { text: `Resolve ${result.blocks.length} blocking issue${result.blocks.length > 1 ? 's' : ''} to proceed`, color: 'text-red-400' };
+    if (result.warnings.length > 0) return { text: `${result.warnings.length} warning${result.warnings.length > 1 ? 's' : ''} remaining — review before execution`, color: 'text-amber-400' };
+    const unanswered = result.items.filter(i => i.status === 'unanswered' || i.status === 'pending').length;
+    if (unanswered > 0) return { text: `${unanswered} question${unanswered > 1 ? 's' : ''} unanswered`, color: 'text-slate-400' };
+    if (result.passed) return { text: 'All checks passed — ready for execution', color: 'text-emerald-400' };
+    return null;
+  }, [result]);
 
   return (
     <div className="space-y-6">
@@ -78,6 +115,9 @@ export default function ChecklistTab({ thesis }) {
             style={{ width: `${result.score}%` }}
           />
         </div>
+        {nextAction && (
+          <p className={`text-xs mt-2 ${nextAction.color}`}>{nextAction.text}</p>
+        )}
       </div>
 
       {/* Position sizing */}
@@ -100,11 +140,11 @@ export default function ChecklistTab({ thesis }) {
         </div>
       </div>
 
-      {/* Blocks */}
+      {/* Blocks — always prominent */}
       {result.blocks.length > 0 && (
         <div className="p-3 rounded border border-red-400/20 bg-red-400/5">
           <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2">
-            Blocking Issues
+            Blocking Issues — Must Resolve
           </p>
           {result.blocks.map((b) => (
             <p key={b.id} className="text-xs text-red-300 mb-1">
@@ -128,12 +168,38 @@ export default function ChecklistTab({ thesis }) {
         </div>
       )}
 
-      {/* Checklist items by category */}
-      {Object.entries(grouped).map(([category, items]) => (
+      {/* Full checklist toggle */}
+      <button
+        onClick={() => setShowFullChecklist(!showFullChecklist)}
+        className="w-full text-left px-3 py-2 rounded border border-slate-800 text-xs text-slate-500 hover:text-slate-300 hover:border-slate-700 transition-colors"
+      >
+        {showFullChecklist ? '▲ Hide full checklist' : `▼ Expand full checklist (${result.items.length} items)`}
+      </button>
+
+      {/* Checklist items by category — sorted by priority, collapsible */}
+      {showFullChecklist && sortedCategories.map(([category, items]) => {
+        const isCollapsed = collapsedCats.has(category);
+        const failCount = items.filter(i => i.status === 'failed').length;
+        const passCount = items.filter(i => i.status === 'passed').length;
+        const allPassed = passCount === items.length;
+
+        return (
         <div key={category}>
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-            {CATEGORY_LABELS[category] || category}
-          </h3>
+          <button
+            onClick={() => toggleCategory(category)}
+            className="flex items-center gap-2 w-full text-left mb-3 group"
+          >
+            <span className="text-xs text-slate-600 group-hover:text-slate-400 transition-colors">{isCollapsed ? '>' : 'v'}</span>
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              {CATEGORY_LABELS[category] || category}
+            </h3>
+            <span className="text-xs text-slate-700">
+              {passCount}/{items.length}
+            </span>
+            {failCount > 0 && <span className="text-xs text-red-400">{failCount} failed</span>}
+            {allPassed && <span className="text-xs text-emerald-500">done</span>}
+          </button>
+          {!isCollapsed && (
           <div className="space-y-2">
             {items.map((item) => {
               const checklistDef = PRE_TRADE_CHECKLIST.find(
@@ -247,8 +313,12 @@ export default function ChecklistTab({ thesis }) {
               );
             })}
           </div>
+          )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
+
+// Exported for backwards compat (ChecklistTab is the only export)

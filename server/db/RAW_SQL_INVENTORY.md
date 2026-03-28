@@ -17,14 +17,9 @@ This file documents the remaining uses of `knex.raw()` in runtime code.
 |------|-------|---------|
 | `server/db/migrations/20260317000000_baseline.js` | `knex.raw("gen_random_uuid()")` | UUID default for primary keys (21 tables) |
 
-## Residual artifacts (not imported by runtime)
-
-| File | Status |
-|------|--------|
-| `server/db/schema.sql` | Old SQLite schema. Not imported anywhere. Safe to delete. |
-
 ## Summary
 
 - **Zero** `.prepare()`, `.exec()`, or `getDb()` calls in runtime code
+- **Zero** SQLite artifacts remaining (schema.sql removed)
 - **3** `knex.raw()` calls in runtime (health checks + time interval)
 - All query logic uses Knex builder: `.where()`, `.insert()`, `.update()`, `.select()`, etc.

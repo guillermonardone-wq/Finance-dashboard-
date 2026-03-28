@@ -10,147 +10,7 @@
 // ============================================================
 
 export async function up(knex) {
-  // ---- SIGNALS ----
-  await knex.schema.createTable("signals", (t) => {
-    t.uuid("id").primary().defaultTo(knex.raw("gen_random_uuid()"));
-    t.text("user_id").notNullable().defaultTo("default");
-    t.timestamp("created_at").notNullable().defaultTo(knex.fn.now());
-    t.timestamp("updated_at").notNullable().defaultTo(knex.fn.now());
-
-    t.text("category").notNullable();
-    t.text("subcategory");
-
-    t.text("title").notNullable();
-    t.text("description").notNullable();
-    t.text("raw_source");
-    t.text("source_type").notNullable();
-    t.text("source_provider");
-    t.text("source_url");
-    t.text("source_attribution");
-
-    t.text("novelty").notNullable().defaultTo("unknown");
-    t.text("reliability").notNullable().defaultTo("unverified");
-    t.float("signal_strength");
-
-    t.uuid("thesis_id").references("id").inTable("theses").onDelete("SET NULL");
-    t.jsonb("related_signal_ids");
-
-    t.text("status").notNullable().defaultTo("inbox");
-    t.jsonb("tags");
-  });
-
-  // ---- THESES ----
-  await knex.schema.createTable("theses", (t) => {
-    t.uuid("id").primary().defaultTo(knex.raw("gen_random_uuid()"));
-    t.text("user_id").notNullable().defaultTo("default");
-    t.timestamp("created_at").notNullable().defaultTo(knex.fn.now());
-    t.timestamp("updated_at").notNullable().defaultTo(knex.fn.now());
-
-    // Core thesis
-    t.text("title").notNullable();
-    t.text("thesis_statement").notNullable();
-    t.jsonb("causal_chain").notNullable();
-    t.jsonb("affected_assets").notNullable();
-    t.jsonb("expected_timeline").notNullable();
-
-    // Probability
-    t.float("probability_low").notNullable();
-    t.float("probability_high").notNullable();
-    t.float("probability_best").notNullable();
-    t.jsonb("market_pricing_assessment").notNullable();
-    t.jsonb("key_assumptions").notNullable();
-    t.jsonb("alternative_explanations").notNullable();
-
-    // Indicators
-    t.jsonb("leading_indicators");
-    t.jsonb("confirming_indicators");
-    t.jsonb("invalidating_indicators");
-    t.jsonb("coincident_indicators");
-    t.jsonb("lagging_indicators");
-
-    // Disconfirmation
-    t.jsonb("disconfirming_evidence").notNullable();
-    t.text("strongest_bear_case").notNullable();
-    t.text("what_would_make_opposite_stronger").notNullable();
-    t.text("early_vs_right");
-
-    // Scoring — Evidence Layer
-    t.float("score_signal_quality");
-    t.float("score_signal_independence");
-    t.float("score_evidence_freshness");
-    t.float("score_data_reliability");
-    t.float("score_evidence_quantity");
-    t.float("score_evidence_layer");
-
-    // Scoring — Structure Layer
-    t.float("score_causal_chain_clarity");
-    t.float("score_internal_consistency");
-    t.float("score_counter_case_robustness");
-    t.float("score_assumption_load");
-    t.float("score_timing_clarity");
-    t.float("score_structure_layer");
-
-    // Scoring — Market Edge Layer
-    t.float("score_market_awareness");
-    t.float("score_prediction_market_divergence");
-    t.float("score_asset_reaction_gaps");
-    t.float("score_liquidity_sensitivity");
-    t.float("score_catalyst_clarity");
-    t.float("score_market_edge_layer");
-
-    // Composite and penalties
-    t.float("composite_score");
-    t.float("penalty_total");
-    t.jsonb("penalty_details");
-
-    // Confidence
-    t.float("confidence_level");
-    t.jsonb("confidence_factors");
-
-    // Calibration
-    t.float("score_at_creation");
-    t.float("score_at_approval");
-    t.text("classification_at_creation");
-    t.jsonb("final_outcome");
-
-    // Legacy scoring columns (deprecated, kept for data continuity)
-    t.float("score_market_mispricing");
-    t.float("score_causal_clarity");
-    t.float("score_catalyst_visibility");
-    t.float("score_timing_precision");
-    t.float("score_expression_quality");
-    t.float("score_risk_containment");
-    t.float("score_disconfirmation_robustness");
-    t.float("score_emotional_neutrality");
-
-    // Classification
-    t.text("classification").notNullable().defaultTo("WATCH");
-    t.text("classification_reason");
-    t.jsonb("previous_classifications");
-
-    // Status
-    t.text("status").notNullable().defaultTo("active");
-    t.text("quarantine_reason");
-    t.timestamp("quarantine_until");
-
-    t.jsonb("tags");
-  });
-
-  // Now add the signals FK that references theses (created after theses table exists)
-  // Note: signals table was created first without the FK; we add it via raw SQL
-  // Actually, Knex handles forward references fine when both tables exist.
-  // The signals table was created with the FK already. But since theses didn't exist
-  // at creation time, we need to handle this differently.
-
-  // Drop and re-add the signals table with proper FK ordering
-  // Actually, let's just create them in correct order. Let me fix this.
-
-  // We need theses first, then signals. Let me restructure.
-  // Drop both tables and recreate in proper order.
-  await knex.schema.dropTableIfExists("signals");
-  await knex.schema.dropTableIfExists("theses");
-
-  // ---- THESES (must come first for FK) ----
+  // ---- THESES (must come first — signals references theses via FK) ----
   await knex.schema.createTable("theses", (t) => {
     t.uuid("id").primary().defaultTo(knex.raw("gen_random_uuid()"));
     t.text("user_id").notNullable().defaultTo("default");
@@ -261,6 +121,15 @@ export async function up(knex) {
 
     t.text("status").notNullable().defaultTo("inbox");
     t.jsonb("tags");
+
+    // Normalized signal fields (used by ingestion pipeline)
+    t.text("entity");
+    t.float("value");
+    t.float("previous_value");
+    t.float("change");
+    t.integer("significance");
+    t.text("direction");
+    t.text("summary");
   });
 
   // ---- EXECUTION PLANS ----

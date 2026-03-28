@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
 const STATE_COLORS = {
@@ -16,10 +17,39 @@ const STATE_ICONS = {
 };
 
 export default function BotFeed() {
+  const navigate = useNavigate();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState(null);
+  const [creatingThesis, setCreatingThesis] = useState(null);
+
+  // Create thesis via server-side endpoint
+  const handleCreateThesis = async (analysis) => {
+    const { cluster, counter_case } = analysis;
+    setCreatingThesis(cluster.title);
+
+    try {
+      const created = await api.createThesisFromCluster({
+        cluster: {
+          title: cluster.title,
+          summary: cluster.summary,
+          primary_category: cluster.primary_category,
+          primary_geographies: cluster.primary_geographies,
+        },
+        signals: cluster.signals || [],
+        counter_case,
+      });
+
+      // Navigate to the new thesis with a banner flag
+      navigate(`/thesis/${created.id}`, {
+        state: { fromCluster: true, clusterTitle: cluster.title },
+      });
+    } catch (err) {
+      setError(`Failed to create thesis: ${err.message}`);
+    }
+    setCreatingThesis(null);
+  };
 
   const runScan = async () => {
     setLoading(true);
@@ -35,18 +65,30 @@ export default function BotFeed() {
         throw new Error(data.error);
       }
       setResult(data);
+
+      // Persist scan summary for the activity bar
+      if (data.summary) {
+        localStorage.setItem('sf_last_scan_summary', JSON.stringify(data.summary));
+        localStorage.setItem('sf_last_scan_at', new Date().toISOString());
+      }
     } catch (err) {
       setError(err.message);
     }
     setLoading(false);
   };
 
+  const lastScanAt = localStorage.getItem('sf_last_scan_at');
+  const lastScanAgo = lastScanAt ? timeSince(lastScanAt) : null;
+
   return (
     <div className="p-6 max-w-5xl">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-100">Bot Intelligence Feed</h1>
-          <p className="text-sm text-slate-500 mt-1">Skeptical analysis. Evidence over narrative. Every recommendation explains why not higher.</p>
+          <p className="text-sm text-slate-500 mt-1">
+            Skeptical analysis. Evidence over narrative.
+            {lastScanAgo && <span className="text-slate-600 ml-2">Last scan: {lastScanAgo}</span>}
+          </p>
         </div>
         <button onClick={runScan} disabled={loading}
           className="px-4 py-2 bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 rounded text-sm hover:bg-cyan-500/20 disabled:opacity-50">
@@ -79,7 +121,7 @@ export default function BotFeed() {
         <div className="bg-red-950/20 rounded-lg border border-red-900/30 p-4 mb-6">
           <h2 className="text-sm font-bold text-red-400 uppercase tracking-wider mb-3">Escalations — Requires Immediate Review</h2>
           {result.analyses.filter(a => a.recommendation.recommended_state === 'ESCALATE').map((analysis, i) => (
-            <AnalysisCard key={i} analysis={analysis} expanded={expanded === `e-${i}`} onToggle={() => setExpanded(expanded === `e-${i}` ? null : `e-${i}`)} />
+            <AnalysisCard key={i} analysis={analysis} expanded={expanded === `e-${i}`} onToggle={() => setExpanded(expanded === `e-${i}` ? null : `e-${i}`)} onCreateThesis={handleCreateThesis} creating={creatingThesis} />
           ))}
         </div>
       )}
@@ -88,7 +130,7 @@ export default function BotFeed() {
       {result?.analyses && (
         <div className="space-y-3">
           {result.analyses.filter(a => a.recommendation.recommended_state !== 'ESCALATE').map((analysis, i) => (
-            <AnalysisCard key={i} analysis={analysis} expanded={expanded === `a-${i}`} onToggle={() => setExpanded(expanded === `a-${i}` ? null : `a-${i}`)} />
+            <AnalysisCard key={i} analysis={analysis} expanded={expanded === `a-${i}`} onToggle={() => setExpanded(expanded === `a-${i}` ? null : `a-${i}`)} onCreateThesis={handleCreateThesis} creating={creatingThesis} />
           ))}
         </div>
       )}
@@ -103,10 +145,12 @@ export default function BotFeed() {
   );
 }
 
-function AnalysisCard({ analysis, expanded, onToggle }) {
+function AnalysisCard({ analysis, expanded, onToggle, onCreateThesis, creating }) {
   const { cluster, recommendation, pattern_match, mispricing_assessment, counter_case } = analysis;
   const stateColor = STATE_COLORS[recommendation.recommended_state] || STATE_COLORS.LOG_ONLY;
   const icon = STATE_ICONS[recommendation.recommended_state] || '·';
+  const isActionable = ['ESCALATE', 'DEVELOP_THESIS'].includes(recommendation.recommended_state);
+  const isCreating = creating === cluster.title;
 
   return (
     <div className={`bg-slate-900 rounded-lg border p-4 ${recommendation.recommended_state === 'ESCALATE' ? 'border-red-900/50' : 'border-slate-800'}`}>
@@ -118,20 +162,44 @@ function AnalysisCard({ analysis, expanded, onToggle }) {
               {icon} {recommendation.recommended_state}
             </span>
             <span className="text-xs text-slate-500">
-              {cluster.signal_count} signals, {cluster.independent_source_count} independent sources
+              {cluster.signal_count} signal{cluster.signal_count !== 1 ? 's' : ''}, {cluster.independent_source_count} source{cluster.independent_source_count !== 1 ? 's' : ''}
             </span>
+            {cluster.primary_category && (
+              <span className="text-xs bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">{cluster.primary_category.replace(/_/g, ' ')}</span>
+            )}
           </div>
           <h3 className="text-sm font-medium text-slate-200">{cluster.title}</h3>
           <p className="text-xs text-slate-500 mt-1 line-clamp-2">{cluster.summary}</p>
         </div>
-        <div className="text-right">
+        <div className="text-right flex flex-col items-end gap-1">
           <span className="text-xs text-slate-600">strength: {cluster.cluster_strength}</span>
-          <br />
           <span className="text-xs text-slate-600">
             confidence: {((recommendation.confidence_range?.best || 0) * 100).toFixed(0)}%
           </span>
+          {isActionable && onCreateThesis && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCreateThesis(analysis); }}
+              disabled={isCreating}
+              className="mt-1 px-3 py-1.5 rounded text-xs font-bold transition-colors bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 disabled:opacity-50"
+            >
+              {isCreating ? 'Creating...' : 'Create Thesis'}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Signal details + Delta indicators */}
+      {cluster.signals && cluster.signals.length > 0 && (
+        <div className="mt-3 flex items-center gap-3 text-xs text-slate-600 flex-wrap">
+          <span>{cluster.signals.length} signal{cluster.signals.length !== 1 ? 's' : ''}</span>
+          {cluster.primary_geographies?.length > 0 && <span className="text-slate-500">{cluster.primary_geographies.join(', ')}</span>}
+          {cluster.cluster_strength >= 4 && <DeltaTag label="strong cluster" direction="up" />}
+          {cluster.signal_count >= 5 && <DeltaTag label="high volume" direction="up" />}
+          {recommendation.confidence_range?.best >= 0.7 && <DeltaTag label="high confidence" direction="up" />}
+          {recommendation.confidence_range?.best < 0.3 && <DeltaTag label="low confidence" direction="down" />}
+          {(recommendation.penalties_applied || []).length >= 2 && <DeltaTag label="heavily penalized" direction="down" />}
+        </div>
+      )}
 
       {/* Why Not Higher — ALWAYS VISIBLE */}
       <div className="mt-3 bg-slate-800/50 rounded p-2.5 border border-slate-700/30">
@@ -142,6 +210,20 @@ function AnalysisCard({ analysis, expanded, onToggle }) {
       {/* Expanded details */}
       {expanded && (
         <div className="mt-4 space-y-4">
+          {/* Signals in cluster */}
+          {cluster.signals?.length > 0 && (
+            <DetailSection title={`Signals (${cluster.signals.length})`} color="cyan">
+              {cluster.signals.slice(0, 8).map((s, i) => (
+                <div key={i} className="flex items-center gap-2 py-1 text-xs">
+                  <FreshnessDot dateStr={s.created_at} />
+                  <SourcePill type={s.source_type} />
+                  <span className="text-slate-300 truncate">{s.title}</span>
+                </div>
+              ))}
+              {cluster.signals.length > 8 && <p className="text-xs text-slate-600">+{cluster.signals.length - 8} more</p>}
+            </DetailSection>
+          )}
+
           {/* Penalties */}
           {(recommendation.penalties_applied || []).length > 0 && (
             <DetailSection title="Penalties Applied" color="red">
@@ -184,14 +266,6 @@ function AnalysisCard({ analysis, expanded, onToggle }) {
                   ))}
                 </div>
               )}
-              {pattern_match.common_false_positives?.length > 0 && (
-                <div className="mt-1">
-                  <p className="text-xs text-red-400 font-medium">Known False Positives:</p>
-                  {pattern_match.common_false_positives.slice(0, 3).map((fp, i) => (
-                    <p key={i} className="text-xs text-red-300 ml-2">! {fp}</p>
-                  ))}
-                </div>
-              )}
             </DetailSection>
           )}
 
@@ -209,7 +283,7 @@ function AnalysisCard({ analysis, expanded, onToggle }) {
                 </div>
               </div>
               {mispricing_assessment.stale_data_penalty_applied && (
-                <p className="text-xs text-red-400 mt-1">STALE DATA PENALTY APPLIED — market assessment is low-confidence.</p>
+                <p className="text-xs text-red-400 mt-1">STALE DATA — low-confidence assessment.</p>
               )}
               <p className="text-xs text-slate-500 mt-1">{mispricing_assessment.reasoning}</p>
             </DetailSection>
@@ -217,10 +291,10 @@ function AnalysisCard({ analysis, expanded, onToggle }) {
 
           {/* Red-Team Counter Case */}
           {counter_case && (
-            <DetailSection title="Red-Team Counter Case" color="red">
+            <DetailSection title="Counter Case" color="red">
               <p className="text-xs text-slate-300">{counter_case.strongest_opposing_case}</p>
               {counter_case.circular_logic_detected && (
-                <p className="text-xs text-red-400 mt-2 font-bold">CIRCULAR LOGIC DETECTED in evidence base.</p>
+                <p className="text-xs text-red-400 mt-2 font-bold">CIRCULAR LOGIC DETECTED</p>
               )}
               {counter_case.evidence_gaps?.length > 0 && (
                 <div className="mt-2">
@@ -231,7 +305,7 @@ function AnalysisCard({ analysis, expanded, onToggle }) {
                 </div>
               )}
               <div className="mt-2 flex gap-2 items-center">
-                <span className="text-xs text-slate-500">Counter case quality:</span>
+                <span className="text-xs text-slate-500">Quality:</span>
                 <span className={`text-xs font-bold ${(counter_case.reasoning_quality_score || 0) >= 7 ? 'text-red-400' : (counter_case.reasoning_quality_score || 0) >= 5 ? 'text-amber-400' : 'text-slate-400'}`}>
                   {counter_case.reasoning_quality_score || 0}/10
                 </span>
@@ -244,15 +318,6 @@ function AnalysisCard({ analysis, expanded, onToggle }) {
             <DetailSection title="What Would Increase Conviction" color="slate">
               {recommendation.required_next_confirmations.map((c, i) => (
                 <p key={i} className="text-xs text-slate-400 py-0.5">→ {c}</p>
-              ))}
-            </DetailSection>
-          )}
-
-          {/* Required User Actions */}
-          {(recommendation.required_user_actions || []).length > 0 && (
-            <DetailSection title="Required User Actions" color="cyan">
-              {recommendation.required_user_actions.map((a, i) => (
-                <p key={i} className="text-xs text-cyan-400 py-0.5">• {a}</p>
               ))}
             </DetailSection>
           )}
@@ -294,4 +359,42 @@ function SummaryStat({ label, value, color }) {
       <p className="text-xs text-slate-600">{label}</p>
     </div>
   );
+}
+
+function DeltaTag({ label, direction }) {
+  const isUp = direction === 'up';
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded ${
+      isUp ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+           : 'bg-red-500/10 text-red-400 border border-red-500/20'
+    }`}>
+      {isUp ? '\u25B2' : '\u25BC'} {label}
+    </span>
+  );
+}
+
+function FreshnessDot({ dateStr }) {
+  if (!dateStr) return <span className="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block" />;
+  const hours = (Date.now() - new Date(dateStr).getTime()) / 3600000;
+  const color = hours < 4 ? 'bg-emerald-400' : hours < 24 ? 'bg-amber-400' : hours < 168 ? 'bg-orange-400' : 'bg-slate-600';
+  return <span className={`w-1.5 h-1.5 rounded-full ${color} inline-block shrink-0`} />;
+}
+
+function SourcePill({ type }) {
+  const colors = {
+    fred: 'text-blue-400', gdelt: 'text-purple-400', acled: 'text-red-300',
+    news_feed: 'text-amber-400', market_data: 'text-cyan-400',
+    manual: 'text-slate-500', government: 'text-emerald-400',
+  };
+  const label = type === 'news_feed' ? 'news' : type === 'market_data' ? 'mkt' : (type || 'other').slice(0, 5);
+  return <span className={`text-xs ${colors[type] || 'text-slate-500'}`}>{label}</span>;
+}
+
+function timeSince(dateStr) {
+  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }

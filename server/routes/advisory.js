@@ -21,6 +21,7 @@ router.post("/thesis/:thesisId/evaluate", async (req, res) => {
     const assessment = await runAdvisoryEvaluation(thesisId, {
       provider,
       model,
+      userId: req.userId || "default",
     });
     res.json(assessment);
   } catch (err) {
@@ -52,7 +53,7 @@ router.get("/thesis/:thesisId/history", async (req, res) => {
 // GET — Preview thesis packet (for debugging / prompt iteration)
 router.get("/thesis/:thesisId/packet", async (req, res) => {
   try {
-    const packet = await buildThesisPacket(req.params.thesisId);
+    const packet = await buildThesisPacket(req.params.thesisId, { userId: req.userId || "default" });
     res.json(packet);
   } catch (err) {
     res.status(404).json({ error: err.message });
